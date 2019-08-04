@@ -7,25 +7,31 @@ Code accompanying the TILES dataset paper and data release
 ```
 ├── data_record
 │   ├── fitbit
+│   │   ├── daily-summary (per participant)
+│   │   ├── heart-rate (per participant)
+│   │   └── step-count (per participant)
+│   ├── omsignal
+│   │   ├── features (per participant)
+│   │   └── ecg-snippets (per participant)
 │   ├── owlinone
 │   │   ├── owls-rssi (per day)
 │   │   ├── jelly-rssi (per participant)
 │   │   ├── minew-rssi (per day)
 │   │   └── minew-data (per stream)
-│   ├── omsignal
-│   │   ├── features (per participant)
-│   │   └── ecg-snippets (per participant)
 │   ├── surveys
-│   │   ├── pre-study
-│   │   ├── IGTB
-│   │   ├── MGT
-│   │   ├── MGT-supplemental
-│   │   └── post-study
+│   │   ├── pre-study-raw
+│   │   ├── IGTB-raw
+│   │   ├── MGT-raw
+│   │   ├── S-MGT-raw
+│   │   ├── post-study-raw
+│   │   ├── pre-study-scored
+│   │   ├── IGTB-scored
+│   │   ├── MGT-scored
+│   │   ├── S-MGT-scored
+│   │   └── post-study-scored
 │   ├── realizd
 │   └── participant-info
-│       ├── demographics
 │       ├── id-mapping
-│       ├── days_at_work
-│       └── start_end_work_times (per participant -- inferred)
-│   ├── extracted_features (?)
+│       └── days-at-work
 ```
+There is one `README` file per sub-folder, describing the `csv.gz` files.
