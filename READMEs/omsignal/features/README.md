@@ -1,4 +1,4 @@
-# daily-summary
+# OMsignal features
 This file describes the OMsignal `features` files.
 
 ## Description
