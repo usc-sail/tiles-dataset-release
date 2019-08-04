@@ -1,5 +1,5 @@
-# daily-summary
-This file describes the `heart-rate` files.
+# Fitbit heart rate
+This file describes the Fitbit `heart-rate` files.
 
 ## Description
 Each one of the files describes a heart rate for each participant. This is organized in a table with the following columns:

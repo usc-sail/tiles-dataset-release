@@ -1,5 +1,5 @@
-# daily-summary
-This file describes the `daily-summary` files.
+# Daily summary
+This file describes the Fitbit `daily-summary` files.
 
 ## Description
 Each one of the files contains a daily summary for each participant. This is organized in a table with the following columns:
