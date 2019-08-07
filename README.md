@@ -1,7 +1,7 @@
 # tiles-dataset-release
 Code accompanying the TILES dataset paper and data release
 
-### Proposed Data Record folder structure
+### Data Record folder structure
 (all files are in csv.gz format)
 
 ```
@@ -10,28 +10,36 @@ Code accompanying the TILES dataset paper and data release
 │   │   ├── daily-summary (per participant)
 │   │   ├── heart-rate (per participant)
 │   │   └── step-count (per participant)
+│   ├── metadata
+│   │   ├── days-at-work (per participant)
+│   │   └── participant-info (single file)
 │   ├── omsignal
 │   │   ├── features (per participant)
-│   │   └── ecg-snippets (per participant)
+│   │   ├── ecg (per participant)
+│   │   └── metadata (per participant)
 │   ├── owlinone
-│   │   ├── owls-rssi (per day)
-│   │   ├── jelly-rssi (per participant)
-│   │   ├── minew-rssi (per day)
-│   │   └── minew-data (per stream)
-│   ├── surveys
-│   │   ├── pre-study-raw
-│   │   ├── IGTB-raw
-│   │   ├── MGT-raw
-│   │   ├── S-MGT-raw
-│   │   ├── post-study-raw
-│   │   ├── pre-study-scored
-│   │   ├── IGTB-scored
-│   │   ├── MGT-scored
-│   │   ├── S-MGT-scored
-│   │   └── post-study-scored
+│   │   ├── jelly (per participant)
+│   │   ├── minew
+│   │   │   │── data (single file -- per stream)
+│   │   │   │── locations (single file)
+│   │   │   └── rssi (per day)
+│   │   ├── owls
+│   │   │   │── locations (single file)
+│   │   │   └── rssi (per day)
 │   ├── realizd
-│   └── participant-info
-│       ├── id-mapping
-│       └── days-at-work
+│   ├── surveys
+│   │   ├── raw
+│   │   │   ├── pre-study
+│   │   │   ├── IGTB
+│   │   │   ├── MGT
+│   │   │   ├── S-MGT
+│   │   │   └── post-study
+│   │   ├── scored
+│   │   │   ├── pre-study
+│   │   │   ├── IGTB
+│   │   │   ├── MGT
+│   │   │   ├── S-MGT
+│   │   │   └── post-study
+
 ```
 There is one `README` file per sub-folder, describing the `csv.gz` files.
