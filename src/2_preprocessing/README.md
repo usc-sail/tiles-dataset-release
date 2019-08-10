@@ -20,7 +20,7 @@ Please provide the following command line arguments:
 One example proper command (borrowing the example output folder from the README in stage one) would look like this:
 
 ```
-./fitbit_preprocess.py ~/Desktop/tiles_data/raw_csv/fitbit ~/Dekstop/tiles_data/preprocessed_csv/fitbit
+./fitbit_preprocess.py ~/Desktop/tiles_data/raw_csv/fitbit ~/Desktop/tiles_data/preprocessed_csv/fitbit
 ```
 
 Each script will create any folders in the output path that do not already exist.

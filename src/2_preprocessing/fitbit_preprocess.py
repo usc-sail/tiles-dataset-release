@@ -25,12 +25,23 @@ import pandas
 import numpy as np
 
 def copyFile(fileName, outputPath):
-    shutil.copy(fileName, outputPath)
+    if os.path.isdir(outputPath):
+        shutil.copy(fileName, outputPath)
+    else:
+        outputFolder = os.path.dirname(outputPath)
+        outputFile = os.path.join(outputFolder, os.path.basename(fileName))
+        shutil.copy(fileName, outputFolder)
+        os.rename(outputFile, outputPath)
+
+    if outputPath.endswith('.gz') and not fileName.endswith('.gz'):
+        os.rename(outputPath, outputPath[:-3])
+        os.system('gzip '+outputPath[:-3])
+
+    return
     
 def cleanHR(heartRateFile):
     minRepeatWindowSize = 50
 
-    print(os.path.basename(heartRateFile))
     hrDF = pandas.read_csv(heartRateFile)
     hrColIdx = hrDF.columns.get_loc('HeartRatePPG')
     repeatIndexStart = -1
@@ -50,31 +61,39 @@ def cleanHR(heartRateFile):
             
     return hrDF
     
-def saveFiles(hr, output):
-    hr.to_csv(output, sep = ',', index = False)
+def saveFiles(df, output):
+   compr = 'infer'
+   if output.endswith('.gz'):
+      compr = 'gzip'
+   df.to_csv(output, sep=',', index=False, compression=compr)
     
 def DoFitbitPreprocess(in_path, out_path):
-   # Ensure the output folder exists
-   if not os.path.isdir(out_path):
-      os.makedirs(out_path)
+   out_hr_path = os.path.join(out_path, 'heart-rate')
+   out_sc_path = os.path.join(out_path, 'step-count')
+   out_ds_path = os.path.join(out_path, 'daily-summary')
+   # Ensure the output folders exist
+   if not os.path.isdir(out_hr_path):
+      os.makedirs(out_hr_path)
+   if not os.path.isdir(out_sc_path):
+      os.makedirs(out_sc_path)
+   if not os.path.isdir(out_ds_path):
+      os.makedirs(out_ds_path)
 
    files = glob.glob(os.path.join(in_path, '*.csv*'))
    #change to input folder
    for f in files:
       file_basename = os.path.basename(f)
-      out_file_name = os.path.join(out_path, file_basename)
-      if out_file_name.endswith(".gz"):
-         out_file_name = out_file_name[0:-3]
-      if 'heartRate.csv' in file_basename:
-          cleanedFile = cleanHR(f)
-          saveFiles(cleanedFile, out_file_name)
-      else:
-          print("Copying file from %s to %s"%(f, out_file_name))
-          copyFile(f, out_file_name)
-
-   print("Output path is %s"%(out_path))
-   for f in glob.glob(os.path.join(out_path, '*')):
-      print(f)
+      participant_id = file_basename.split('_')[0]
+      if 'heart' in file_basename:
+         out_file_name = os.path.join(out_hr_path, participant_id+'.csv.gz')
+         cleaned_file = cleanHR(f)
+         saveFiles(cleaned_file, out_file_name)
+      elif 'step' in file_basename:
+         out_file_name = os.path.join(out_sc_path, participant_id+'.csv.gz')
+         copyFile(f, out_file_name)
+      elif 'daily' in file_basename:
+         out_file_name = os.path.join(out_ds_path, participant_id+'.csv.gz')
+         copyFile(f, out_file_name)
 
 if __name__ == '__main__':
    if len(sys.argv) > 2:

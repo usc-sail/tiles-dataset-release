@@ -34,8 +34,8 @@ def DoMinewPreprocess(in_path, out_path):
    for f in files:
       file_basename = os.path.basename(f)
       out_file_name = os.path.join(out_path, file_basename)
-      if out_file_name.endswith('.gz'):
-         out_file_name = out_file_name[:-3]
+      if not out_file_name.endswith('.gz'):
+         out_file_name += '.gz'
 
       df = pd.read_csv(f)
       
@@ -43,7 +43,7 @@ def DoMinewPreprocess(in_path, out_path):
       valid_idx = [x.upper().startswith(valid_minew_mac_prefix) for x in df['deviceId']]
       df = df[pd.Series(valid_idx, name='bools').values]
 
-      df.to_csv(out_file_name, header=True, index=False)
+      df.to_csv(out_file_name, header=True, index=False, compression='gzip')
 
    return
 

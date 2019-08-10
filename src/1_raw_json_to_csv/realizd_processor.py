@@ -59,7 +59,7 @@ def AppendCsvData(df, participant_id, out_folder):
 def CreateCsvSafe(df, participant_id, out_folder):
    global realizd_file_path
 
-   realizd_file_path = os.path.join(out_folder, './%s_realizd.csv'%(str(participant_id)))
+   realizd_file_path = os.path.join(out_folder, './%s.csv'%(str(participant_id)))
    if not os.path.exists(realizd_file_path):
       realizd_header = ['Timestamp', 'SecondsOnPhone']
       with open(realizd_file_path, 'wb') as realizd_csvfile:
@@ -107,5 +107,6 @@ if __name__ == '__main__':
 
         if DoRealizdJsonToCsv(realizd_file_name, out_folder):
              ReverseCsvRows(out_folder)
+             os.system('gzip '+os.path.join(out_folder, '*.csv'))
     else:
         print "Please provide the following command line arguments:\n 1) Realizd json file to parse\n 2) Output folder path"

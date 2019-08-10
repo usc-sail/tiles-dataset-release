@@ -41,11 +41,11 @@ def cleanOmsignal(fileName, in_path):
  
    return dataFrame
 
-def saveFile(dataFrame, fileName, output):
-   current = os.getcwd()
-   os.chdir(output)
-   dataFrame.to_csv(fileName, index = False)
-   os.chdir(current)
+def saveFile(df, output):
+   compr = 'infer'
+   if output.endswith('.gz'):
+      compr = 'gzip'
+   df.to_csv(output, sep=',', index=False, compression=compr)
    return
     
 def DoOmsignalPreprocess(in_path, out_path):
@@ -55,12 +55,11 @@ def DoOmsignalPreprocess(in_path, out_path):
    files = glob.glob(os.path.join(in_path, '*.csv*'))
    for f in files:
       file_basename = os.path.basename(f)
+      participant_id = file_basename.split('_')[0]
       cleanedFile = cleanOmsignal(file_basename, in_path)
 
-      out_file_name = os.path.join(out_path, file_basename)
-      if out_file_name.endswith(".gz"):
-         out_file_name = file_basename[0:-3]
-      saveFile(cleanedFile, out_file_name, out_path)
+      out_file_name = os.path.join(out_path, participant_id+'.csv.gz')
+      saveFile(cleanedFile, out_file_name)
    return
 
 if __name__ == '__main__':
