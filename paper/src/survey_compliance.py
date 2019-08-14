@@ -201,6 +201,45 @@ def ComputeSurveyCompliance(root_data_path, tikz_out_folder=None):
          matplotlib2tikz.save(tikz_out_path)
       plt.show(block=False)
 
+   # Generate histogram of the compliance per participant across MGT, and S-MGT surveys
+   # First, get a list of all participants
+   participant_ids = []
+   for mgt_survey_type in mgt_compliance.keys():
+      participant_ids.extend(mgt_compliance[mgt_survey_type].keys())
+   for smgt_survey_type in smgt_compliance.keys():
+      participant_ids.extend(smgt_compliance[smgt_survey_type].keys())
+   participant_ids = np.unique(participant_ids)
+
+   # Second, assumbled data for histogram
+   hist_valid = []
+   max_possible = 0
+   for participant_id in participant_ids:
+      num_valid_responses = 0
+      num_possible_responses = 0
+      for mgt_survey_type in mgt_compliance.keys():
+         if participant_id in mgt_compliance[mgt_survey_type].keys():
+            num_valid_responses += mgt_compliance[mgt_survey_type][participant_id]['num_valid']
+            num_possible_responses += mgt_compliance[mgt_survey_type][participant_id]['num_possible']
+      for smgt_survey_type in smgt_compliance.keys():
+         if participant_id in smgt_compliance[smgt_survey_type].keys():
+            num_valid_responses += smgt_compliance[smgt_survey_type][participant_id]['num_valid']
+            num_possible_responses += smgt_compliance[smgt_survey_type][participant_id]['num_possible']
+
+      hist_valid.append(num_valid_responses)
+      max_possible = max(max_possible, num_possible_responses)
+
+   # Third, plot the histogram
+   hist_valid = np.array(hist_valid).astype(float)/max_possible
+   plt.figure()
+   plt.hist(hist_valid)
+   plt.title('Combined MGT and S-MGT Survey Compliance Histogram Per Participant')
+   plt.xlabel('Ratio of Completed Questions')
+   plt.ylabel('Number of Participants')
+   if tikz_out_folder is not None:
+      tikz_out_path = os.path.join(tikz_out_folder, 'combined_compliance_hist.tex')
+      matplotlib2tikz.save(tikz_out_path)
+   plt.show(block=False)
+
    plt.show()
    return
 
