@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Author: Brandon Booth
+# Authors: Brandon Booth, Karel Mundnich mundnich@usc.edu
 
 import os
 import sys
@@ -25,7 +25,7 @@ import argparse
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib2tikz
+import tikzplotlib
 
 def CountValidResponses(df, survey_type):
    num_valid_responses = df.shape[0]*[np.nan]
@@ -54,6 +54,9 @@ def ComputeSurveyCompliance(root_data_path, tikz_out_folder=None):
    if tikz_out_folder is not None:
       if not os.path.isdir(tikz_out_folder):
          os.makedirs(tikz_out_folder)
+
+   fig, ax = plt.subplots(2,3)
+
    #################
    # IGTB compliance
    #################
@@ -110,7 +113,7 @@ def ComputeSurveyCompliance(root_data_path, tikz_out_folder=None):
          mgt_compliance[survey_type][participant_id]['num_valid'] += num_valid_responses[row_idx]
          mgt_compliance[survey_type][participant_id]['num_possible'] += num_possible_responses[row_idx]
 
-   for survey_type in mgt_compliance.keys():
+   for (i, survey_type) in enumerate(mgt_compliance.keys()):
       num_unique_participants = len(mgt_compliance[survey_type].keys())
       num_valid = 0
       num_possible = 0
@@ -128,15 +131,14 @@ def ComputeSurveyCompliance(root_data_path, tikz_out_folder=None):
          hist_valid.append(mgt_compliance[survey_type][participant_id]['num_valid'])
          max_possible = max(max_possible, mgt_compliance[survey_type][participant_id]['num_possible'])
       hist_valid = np.array(hist_valid).astype(float)/max_possible
-      plt.figure()
-      plt.hist(hist_valid)
-      plt.title('MGT %s Survey Compliance Histogram Per Participant'%(survey_type))
-      plt.xlabel('Ratio of Completed MGT Questions')
-      plt.ylabel('Number of Participants')
-      if tikz_out_folder is not None:
-         tikz_out_path = os.path.join(tikz_out_folder, 'mgt_%s_compliance_hist.tex'%(survey_type))
-         matplotlib2tikz.save(tikz_out_path)
-      plt.show(block=False)
+      
+      ax[0][i].hist(hist_valid)
+      ax[0][i].title.set_text('MGT %s Survey Compliance Histogram Per Participant'%(survey_type))
+      ax[0][i].set_xlabel('Ratio of Completed MGT Questions')
+      ax[0][i].set_ylabel('Number of Participants')
+      # if tikz_out_folder is not None:
+      #    tikz_out_path = os.path.join(tikz_out_folder, 'mgt_%s_compliance_hist.tex'%(survey_type))
+      
    print("--------------------")
 
    ##################
@@ -173,7 +175,7 @@ def ComputeSurveyCompliance(root_data_path, tikz_out_folder=None):
       smgt_compliance[survey_type][participant_id]['num_valid'] += num_valid
       smgt_compliance[survey_type][participant_id]['num_possible'] += num_possible
 
-   for survey_type in ['psych_flex', 'engage_psycap']:
+   for (i, survey_type) in enumerate(['psych_flex', 'engage_psycap']):
       num_unique_ids = len(smgt_compliance[survey_type].keys())
       num_valid = 0
       num_possible = 0
@@ -191,15 +193,14 @@ def ComputeSurveyCompliance(root_data_path, tikz_out_folder=None):
          hist_valid.append(smgt_compliance[survey_type][participant_id]['num_valid'])
          max_possible = max(max_possible, smgt_compliance[survey_type][participant_id]['num_possible'])
       hist_valid = np.array(hist_valid).astype(float)/max_possible
-      plt.figure()
-      plt.hist(hist_valid)
-      plt.title('S-MGT %s Survey Compliance Histogram Per Participant'%(survey_type))
-      plt.xlabel('Ratio of Completed S-MGT Questions')
-      plt.ylabel('Number of Participants')
-      if tikz_out_folder is not None:
-         tikz_out_path = os.path.join(tikz_out_folder, 'smgt_%s_compliance_hist.tex'%(survey_type))
-         matplotlib2tikz.save(tikz_out_path)
-      plt.show(block=False)
+
+      ax[1][i].hist(hist_valid)
+      ax[1][i].title.set_text('S-MGT %s Survey Compliance Histogram Per Participant'%(survey_type))
+      ax[1][i].set_xlabel('Ratio of Completed S-MGT Questions')
+      ax[1][i].set_ylabel('Number of Participants')
+      # if tikz_out_folder is not None:
+      #    tikz_out_path = os.path.join(tikz_out_folder, 'smgt_%s_compliance_hist.tex'%(survey_type))
+      #    tikzplotlib.save(tikz_out_path)
 
    # Generate histogram of the compliance per participant across MGT, and S-MGT surveys
    # First, get a list of all participants
@@ -230,17 +231,19 @@ def ComputeSurveyCompliance(root_data_path, tikz_out_folder=None):
 
    # Third, plot the histogram
    hist_valid = np.array(hist_valid).astype(float)/max_possible
-   plt.figure()
-   plt.hist(hist_valid)
-   plt.title('Combined MGT and S-MGT Survey Compliance Histogram Per Participant')
-   plt.xlabel('Ratio of Completed Questions')
-   plt.ylabel('Number of Participants')
-   if tikz_out_folder is not None:
-      tikz_out_path = os.path.join(tikz_out_folder, 'combined_compliance_hist.tex')
-      matplotlib2tikz.save(tikz_out_path)
-   plt.show(block=False)
 
-   plt.show()
+   ax[1][-1].hist(hist_valid)
+   ax[1][-1].title.set_text('Combined MGT and S-MGT Survey Compliance Histogram Per Participant')
+   ax[1][-1].set_xlabel('Ratio of Completed Questions')
+   ax[1][-1].set_ylabel('Number of Participants')
+   
+
+   if tikz_out_folder is not None:
+      tikz_out_path = os.path.join(tikz_out_folder, 'survey_compliance.tex')
+      tikzplotlib.save(tikz_out_path)
+
+   # plt.show()
+   tikzplotlib.save('survey_compliance.tex')
    return
 
 if __name__=='__main__':
