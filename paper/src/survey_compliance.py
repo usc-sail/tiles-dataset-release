@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # Copyright (C) 2019 SAIL Lab @ University of Southern California
 #
 # This program is free software: you can redistribute it and/or modify
@@ -211,7 +211,7 @@ def ComputeSurveyCompliance(root_data_path, tikz_out_folder=None):
       participant_ids.extend(smgt_compliance[smgt_survey_type].keys())
    participant_ids = np.unique(participant_ids)
 
-   # Second, assumbled data for histogram
+   # Second, assumble data for histogram
    hist_valid = []
    max_possible = 0
    for participant_id in participant_ids:
@@ -241,9 +241,9 @@ def ComputeSurveyCompliance(root_data_path, tikz_out_folder=None):
    if tikz_out_folder is not None:
       tikz_out_path = os.path.join(tikz_out_folder, 'survey_compliance.tex')
       tikzplotlib.save(tikz_out_path)
+   else:
+      plt.show()
 
-   # plt.show()
-   tikzplotlib.save('survey_compliance.tex')
    return
 
 if __name__=='__main__':
