@@ -1,5 +1,5 @@
 # Data Processing Pipeline Overview
-All of the code used to convert the raw sensor data into the published dataset format is provided here.  The code is provided as documentation for reproducibility and curious investigators, but the fully processed dataset is conveniently available for download at <url://TODO>.
+All of the code used to convert the raw sensor data into the published dataset format is provided here.  The code is provided as documentation for reproducibility and curious investigators, but the fully processed dataset is conveniently available for download at <https://tiles-data.isi.edu>.
 
 The processing is split into three stages:
  - Stage 1: Raw JSON format conversion to tabular CSV format
@@ -48,4 +48,4 @@ The Owl-in-One sensors are hubs that aggregated Bluetooth transmissions from oth
 ### Days at Work
 ***TODO - @Tiantian, some work is needed on the scripts.  There are three scripts: `days_at_work.py`, `days_at_work_by_single_participants.py`, and `x_previous_days_at_work.py`. They seem to take a "data folder" as input and then search for the right sensor data files to use in subfolders, but the same subfolder don't exist in our released dataset.  I think the simplest fix would be to change the code so it accepts each sensor's data folder separately as input.  Thoughts? Can you please implement this?  We should also include whatever scripts are necessary in the TILES/delivery repository moving forward.  I think we should deprecate use of the TILES/TILES-Git one eventually.***
  1. Ensure that all scripts for the following streams have been executed: OMSignal, Owl-in-One, Ground Truth
- 1. TODO - @Tiantian, can you please provide some instructions?
+ 1. ***TODO - @Tiantian, can you please provide some instructions?***
