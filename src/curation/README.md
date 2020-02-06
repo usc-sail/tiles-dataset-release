@@ -5,4 +5,8 @@ Copies data from the buckets used by the project to the bucket for the releasing
 
 ## `copy_to_opendata.sh`
 
-Same, but can be run locally, without EC2.
+Scripts for those curations that can be run locally, without EC2.
+
+### Notes
+
+The surveys underwent another manual step of curation to uniformize scale nomenclature and data curation.
