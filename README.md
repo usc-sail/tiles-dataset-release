@@ -1,45 +1,7 @@
 # tiles-dataset-release
-Code accompanying the TILES dataset paper and data release
+Code accompanying the [https://tiles-data.isi.edu](TILES data set publication) and data release.  The data set can be obtained from [https://tiles-data.isi.edu](https://tiles-data.isi.edu)
 
-### Data Record folder structure
-(all files are in csv.gz format)
+There are README files in the src/ subtree explaining the code organization and how to run it.
 
-```
-├── data_record
-│   ├── fitbit
-│   │   ├── daily-summary (per participant)
-│   │   ├── heart-rate (per participant)
-│   │   └── step-count (per participant)
-│   ├── metadata
-│   │   ├── days-at-work (per participant)
-│   │   └── participant-info (single file)
-│   ├── omsignal
-│   │   ├── features (per participant)
-│   │   ├── ecg (per participant)
-│   │   └── metadata (per participant)
-│   ├── owlinone
-│   │   ├── jelly (per participant)
-│   │   ├── minew
-│   │   │   │── data (single file -- per stream)
-│   │   │   │── locations (single file)
-│   │   │   └── rssi (per day)
-│   │   ├── owls
-│   │   │   │── locations (single file)
-│   │   │   └── rssi (per day)
-│   ├── realizd
-│   ├── surveys
-│   │   ├── raw
-│   │   │   ├── pre-study
-│   │   │   ├── IGTB
-│   │   │   ├── MGT
-│   │   │   ├── S-MGT
-│   │   │   └── post-study
-│   │   ├── scored
-│   │   │   ├── pre-study
-│   │   │   ├── IGTB
-│   │   │   ├── MGT
-│   │   │   ├── S-MGT
-│   │   │   └── post-study
 
-```
-There is one `README` file per sub-folder, describing the `csv.gz` files.
+If you find and fix any code bugs, please send a pull request via GitHub with the committed change.  Please send any other inquiries to [brandon.m.booth@gmail.com](mailto:brandon.m.booth@gmail.com?subject=TILES%20Data%20Set%20Inquiry)

@@ -2,7 +2,7 @@
 # This software (or technical data) was produced for the U.S. Government under contract 
 # 2015-14120200002-002, and is subject to the Rights in Data-General Clause 52.227-14, 
 # ALT IV (MAY 2014) or (DEC 2007).
-# ©2019 The MITRE Corporation. All Rights Reserved. Approved for Public Release; Distribution Unlimited. Case Number 19-2656
+# ?2019 The MITRE Corporation. All Rights Reserved. Approved for Public Release; Distribution Unlimited. Case Number 19-2656
 
 
 ######################################################################################################
@@ -40,10 +40,10 @@
 #Set working directory path
 
 #This directory should include the daily survey file(s) that you wish to merge (in csv format)
-setwd("Full Directory Path Here")
+setwd("/USC/TILES/tiles-careless-responses/raw_survey_data_with_index/mgt/")
 
 ###Define a name for the output file subdirectory (name only, in quotes, not the full path)###
-OutputDir <- "Output"
+OutputDir <- "Merged"
 
 ############  END USER INPUTS #####################
 
@@ -173,7 +173,7 @@ col_order <- c("sourcefile","surveytype","Name","Timesent","Date","Day","Timesta
                "work","itpd1","itpd2","itpd3","irbd1","irbd2","irbd3","irbd4","irbd5","irbd6","irbd7",
                "dalal1","dalal2","dalal3","dalal4","dalal5","dalal6","dalal7","dalal8",
                "dalal9","dalal10","dalal11","dalal12","dalal13","dalal14","dalal15","dalal16",
-               "DayWeek","ResponseID","ResponseSet","Q_TotalDuration")
+               "DayWeek","ResponseID","ResponseSet","Q_TotalDuration","WaveIndex","PerParticipantSurveyTypeIndex","PerParticipantSurveyIndex")
 
 merged.sorted <- merged.sorted[, col_order]
 
