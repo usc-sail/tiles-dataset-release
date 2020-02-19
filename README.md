@@ -1,5 +1,5 @@
 # tiles-dataset-release
-Code accompanying the [https://tiles-data.isi.edu](TILES data set publication) and data release.  The data set can be obtained from [https://tiles-data.isi.edu](https://tiles-data.isi.edu)
+Code accompanying the TILES data set publication and data release.  The data set can be obtained from [https://tiles-data.isi.edu](https://tiles-data.isi.edu)
 
 There are README files in the src/ subtree explaining the code organization and how to run it.
 
