@@ -46,6 +46,15 @@ The Owl-in-One sensors are hubs that aggregated Bluetooth transmissions from oth
  1. ***TODO - @Brandon, include instructions for running the code***
 
 ### Days at Work
-***TODO - @Tiantian, some work is needed on the scripts.  There are three scripts: `days_at_work.py`, `days_at_work_by_single_participants.py`, and `x_previous_days_at_work.py`. They seem to take a "data folder" as input and then search for the right sensor data files to use in subfolders, but the same subfolder don't exist in our released dataset.  I think the simplest fix would be to change the code so it accepts each sensor's data folder separately as input.  Thoughts? Can you please implement this?  We should also include whatever scripts are necessary in the TILES/delivery repository moving forward.  I think we should deprecate use of the TILES/TILES-Git one eventually.***
- 1. Ensure that all scripts for the following streams have been executed: OMSignal, Owl-in-One, Ground Truth
- 1. ***TODO - @Tiantian, can you please provide some instructions?***
+ 1. Download the OMsignal data, the Owl-in-One data, and the survey data.
+ 2. Run the script as follows:
+
+ ```
+	python days_at_work.py -s stream -i stream_data_directory -o write_folder
+ ```
+ 3. To merge the files, run
+
+ ```
+	python x_previous_days_at_work.py -x 1 -f data_folder
+ ```
+ where `data_folder` is the same folder as `write_folder` in the previous step.
