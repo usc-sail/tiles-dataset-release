@@ -615,7 +615,7 @@ do
     find . -name '*.csv.gz' -print0 | xargs -0 -P 3 -I {} ~/process_file.sh "{}" "../new/"
     
     cd
-    aws s3 sync new/ "s3://${TARGET_AUDIO_BUCKET}/raw/$u/" > ~/$u.ul.log
+    aws s3 sync new/ "s3://${TARGET_AUDIO_BUCKET}/raw-features/$u/" > ~/$u.ul.log
     
     rm -Rf new $u
 done
@@ -658,3 +658,32 @@ do
 done
 
 
+
+## Foreground predictions
+
+mkdir tmp
+cd tmp
+
+cat > trim_filename.sh <<EOF
+#!/bin/bash
+
+mv \$1 \${1##*_}
+EOF 
+chmod u+x trim_filename.sh
+
+# aws s3 sync s3://${RAW_BUCKET_1}-processed/3_preprocessed_data/jelly_intermediate/FG_predictions/ .
+
+for j in $(aws s3 ls s3://${RAW_BUCKET_1}/jelly/ | sed -e 's/^.*PRE //' -e 's@/@@g')
+do
+    echo $j
+    mkdir data
+    cd data
+    aws s3 sync s3://${RAW_BUCKET_1}-processed/3_preprocessed_data/jelly_intermediate/FG_predictions/$j/ . > ../$j.dl.log
+    find . -print0 | xargs -0 -P 3 -I {} ../trim_filename.sh {}
+    aws s3 sync . "s3://${TARGET_AUDIO_BUCKET}/fg-predictions/$j/" > ../$j.ul.log
+    cd ..
+    rm -R data
+done
+
+cd ..
+rm -Rf tmp

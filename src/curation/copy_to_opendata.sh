@@ -58,8 +58,6 @@ done
 
 
 ## OWL-in-One: Jelly
-# FIXME: remove participant_id
-# FIXME: remove mac address
 
 aws s3 cp --recursive s3://${PROCESSED_BUCKET}/3_preprocessed_data/owl_in_one/ s3://${TARGET_BUCKET}/owlinone/jelly/
 for f in $(aws s3 ls s3://${TARGET_BUCKET}/owlinone/jelly/ | sed -e 's/^.*[0-9] \([0-9a-f].*\)$/\1/')
@@ -69,25 +67,104 @@ done
 
 
 ## OWL-in-One: Minew Data
-# FIXME: remove mac address
+# Assumes the hash map is available as hashed_directories.csv
 
-aws s3 cp --recursive s3://${PROCESSED_BUCKET}/3_preprocessed_data/minew/ s3://${TARGET_BUCKET}/owlinone/minew/data/
+aws s3 cp --recursive s3://${PROCESSED_BUCKET}/3_preprocessed_data/minew/ .
+aws s3 cp s3://${RAW_BUCKET}/id-mapping/minews_directories_opendataset.csv .
+
+echo sed $(
+    tail -n+2 hashed_directories.csv | \
+        sed -e 's/^\(.*\),\(.*\),.*,.*$/-e '"'"'s@\1@\2@'"'"' /'
+    tail -n+2 hashed_directories.csv | \
+        sed -e 's@^\(.*\):.*,.*,\(.*\),.*$@\1,\2@' | \
+        sort -u | \
+        sed -e 's/^\(.*\),\(.*\)$/-e '"'"'s@\1@\2@'"'"' /'
+) '${1:-/dev/stdin}' > process_directory_mapping.sh
+chmod u+x process_directory_mapping.sh
+./process_directory_mapping.sh minews_directories_opendataset.csv > minews_hashed_directories_opendataset.csv
+
+
+mkdir light
+cd light
+for map in $(grep light ../minews_hashed_directories_opendataset.csv)
+do
+    MAC=$(echo $map | cut -d, -f1)
+    DIRECTORY=$(echo $map | cut -d, -f3)
+    (
+        zcat ../light.csv.gz | head -n1 | cut -d, -f1,3,4
+        zgrep $MAC ../light.csv.gz | \
+            grep -E "^2018-0([4-6]|3-0[5-9]|3-[123]|7-0|7-1[0-4])" | \
+            cut -d, -f1,3,4
+    ) | gzip -9 > ${DIRECTORY}.csv.gz
+done
+cd ..
+
+mkdir temp_humid
+cd temp_humid
+for map in $(grep temp_humid ../minews_hashed_directories_opendataset.csv)
+do
+    MAC=$(echo $map | cut -d, -f1)
+    DIRECTORY=$(echo $map | cut -d, -f3)
+    (
+        zcat ../temperatureHumidity.csv.gz | head -n1 | cut -d, -f1,3,4,5
+        zgrep $MAC ../temperatureHumidity.csv.gz | \
+            grep -E "^2018-0([4-6]|3-0[5-9]|3-[123]|7-0|7-1[0-4])" | \
+            cut -d, -f1,3,4,5
+    ) | gzip -9 > ${DIRECTORY}.csv.gz
+done
+cd ..
+
+mkdir motion
+cd motion
+for map in $(grep -vE 'Type|light|temp' ../minews_hashed_directories_opendataset.csv)
+do
+    MAC=$(echo $map | cut -d, -f1)
+    DIRECTORY=$(echo $map | cut -d, -f3)
+    (
+        zcat ../motion.csv.gz | head -n1 | cut -d, -f1,3,4,5,6
+        zgrep $MAC ../motion.csv.gz | \
+            grep -E "^2018-0([4-6]|3-0[5-9]|3-[123]|7-0|7-1[0-4])" | \
+            cut -d, -f1,3,4,5,6
+    ) | gzip -9 > ${DIRECTORY}.csv.gz
+done
+cd ..
+
+s3://${TARGET_BUCKET}/owlinone/minew/data/
+
+cd ..
+rm light.csv.gz
 
 
 ## OWL-in-One: Minew Locations
 
-aws s3 cp s3://${PROCESSED_BUCKET}/owl_locations/minew_locations_keck.csv.gz s3://${TARGET_BUCKET}/owlinone/minew/locations/
+# Hashed version, not this one
+# aws s3 cp s3://${PROCESSED_BUCKET}/owl_locations/minew_locations_keck.csv.gz s3://${TARGET_BUCKET}/owlinone/minew/locations/
 
 
 ## OWL-in-One: Minew RSSI
-# FIXME: remove mac address
+# Assumes process_directory_mapping.sh and minews_hashed_directories_opendataset.csv are available
 
 aws s3 cp --recursive s3://${PROCESSED_BUCKET}/2_raw_csv_data/minew_rssi/ s3://${TARGET_BUCKET}/owlinone/minew/rssi/
 
+for map in $(grep -v 'Type' minews_hashed_directories_opendataset.csv)
+do
+    MAC=$(echo $map | cut -d, -f1 | sed -e 's/://g')
+    DIRECTORY=$(echo $map | cut -d, -f3)
+    (
+        echo timestamp,directory,rssi
+        zgrep -h $MAC 2018*.csv.gz | \
+            cut -d, -f1,5,6 | \
+            grep -v ',,' | \
+            ./process_directory_mapping.sh
+    ) | gzip -9 > ${DIRECTORY}.csv.gz
+done
+
+aws 
 
 ## OWL-in-One: OWL Locations
 
-aws s3 cp s3://${PROCESSED_BUCKET}/owl_locations/owl_locations_keck.csv.gz s3://${TARGET_BUCKET}/owlinone/owls/locations/
+# Hashed version, not this one
+# aws s3 cp s3://${PROCESSED_BUCKET}/owl_locations/owl_locations_keck.csv.gz s3://${TARGET_BUCKET}/owlinone/owls/locations/
 
 
 ## OWL-in-One: OWL RSSI
@@ -122,245 +199,421 @@ aws s3 sync sorted/ s3://${TARGET_BUCKET}/realizd/
 # Note: weird files with “July” in the name!!
 # Note: PILOT data removed
 
-# for f in $(aws s3 ls s3://${RAW_BUCKET}/ground_truth/MGT/ | sed -e 's/^.*[0-9] \(USC.*\)$/\1/' | grep -E '(DAY|NIGHT)' | grep -v 'July')
-# do
-#     aws s3 cp "s3://${RAW_BUCKET}/ground_truth/MGT/$f" "s3://${TARGET_BUCKET}/surveys/raw/MGT/$(echo "$f" | sed -e 's/USC_\([A-Z]*\)_\([0-9]\{4\}\)\([0-9]\{2\}\)\([0-9]\{2\}\)_\(.*\)_\(.*\)\.csv/\2-\3-\4-\6-\1-\5.csv/')"
-# done
-# mkdir tmp
-# cd tmp
-# aws s3 cp --recursive s3://${TARGET_BUCKET}/surveys/raw/MGT/ .
-# find . -name "*csv" -print0 | xargs -0 -P 8 -I % gzip %
-# aws s3 sync . s3://${TARGET_BUCKET}/surveys/raw/MGT/ --delete --dryrun
 
 
-aws s3 cp s3://${PROCESSED_BUCKET}/2_raw_csv_data/ground_truth/MGT/MGT.csv.gz .
+cat > create_sent_timestamp.awk <<EOF
+\$11 ~ /12:00am/ || (\$11 ~/^$/ && \$(NF) ~ /0000/)  {
+    \$8 = \$7"T00:00:00";
+}
+\$11 ~ /6:00am/ || (\$11 ~/^$/ && \$(NF) ~ /0600/) {
+    \$8 = \$7"T06:00:00";
+}
+\$11 ~ /12:00pm/ || (\$11 ~/^$/ && \$(NF) ~ /1200/) {
+    \$8 = \$7"T12:00:00";
+}
+\$11 ~ /6:00pm/ || (\$11 ~/^$/ && \$(NF) ~ /1800/) {
+    \$8 = \$7"T18:00:00";
+}
+{
+    print
+}
+EOF
+
+
+aws s3 sync s3://${RAW_BUCKET}/ground_truth/MGT/ . --exclude '*July*'
 aws s3 cp s3://${PROCESSED_BUCKET}/id-mapping/mitreids.csv .
 
-cat > remove_quotes.awk <<EOF
-BEGIN {
-  OFS=",";
-  FS=",";
-  FPAT="([^,]*)|(\"[^\"]+\")"
-}
-{
-  for (i=1; i<=NF; i++) {
-    if ($(zcat MGT.csv.gz | head -n1 | tr , '\n' | grep -nE '(TEXT|DayWeek)' | cut -d: -f1 | sed -e 's/^/i!=/' -e 's/$/ \&\&/' | tr '\n' ' ' | sed -e 's/ && $//')) {
-      \$(i) = gensub(/^\"(.*)\"$/, "\\\\1", "1", \$(i))
-    }
-  }
-  print
-}
-EOF
+rm *201802* *20180301* *20180302* *20180303* *20180304*
+for f in USC*
+do
+    mv $f $(echo $f | sed -e 's/USC_\(NIGHT\|DAY\|PILOT\)_\([0-9]*\)_\(job\|health\|personality\)_\(12[ap]m\|6[ap]m\)/\2_\4_\1_\3/' -e 's/6pm/1800/' -e 's/12am/0000/' -e 's/[ap]m/00/' -e 's/600/0600/');
+done
 
-#   print $(zcat MGT.csv.gz | head -n1 | sed -e 's/,/\n/g'  | grep -ivn -E "(sourcefile|context.*_TEXT|DayWeek|ResponseID|ResponseSet)"  | cut -f1 -d: | tr '\n' ',' | sed -e 's/,$//' -e 's/,/,$/g' -e 's/^/$/')
-cat > subset.awk <<EOF
-BEGIN {
-  OFS=",";
-  FS=",";
-  FPAT="([^,]*)|(\"[^\"]+\")"
-}
-{
-  print $(zcat MGT.csv.gz | head -n1 | sed -e 's/,/\n/g'  | grep -ivn -E "(sourcefile|DayWeek|ResponseID|ResponseSet)"  | cut -f1 -d: | tr '\n' ',' | sed -e 's/,$//' -e 's/,/,$/g' -e 's/^/$/')
-}
-EOF
+(
+    echo "$(head -n1 $(ls *perso* | head -n1) | sed -e 's/,*$//'),$(head -n1 $(ls *health* | head -n1) | cut -d, -f60- | sed -e 's/,*$//'),$(head -n1 $(ls *job* | head -n1) | cut -d, -f60- | sed -e 's/,*$//')" | \
+        sed -e 's/,*$//' -e 's/"//g' -e 's/$/,filename/'
+    for f in *
+    do
+        if echo $f | grep -q perso
+        then
+            tail -n+3 $f | \
+                gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '{NF=73; print}' | \
+                sed -e 's/day,/day/' -e "s/$/$(printf ',%.0s' {1..82})/" -e "s/$/,$f/"
+        elif echo $f | grep -q health
+        then
+            tail -n+3 $f | \
+                gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" "{\$59 = \$59\"$(printf ',%.0s' {1..14})\"; NF=98; print \$0}" | \
+                sed -e 's/day,/day/' -e "s/$/$(printf ',%.0s' {1..43})/" -e "s/$/,$f/"
+        elif echo $f | grep -q job
+        then
+            tail -n+3 $f | \
+                gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" "{\$59 = \$59\"$(printf ',%.0s' {1..53})\"; NF=102; print \$0}" | \
+                sed -e 's/day,/day/' -e "s/$/,$f/"
+        fi
+    done
+) | \
+    sed -e 's/\r//g' -e 's/""//g' -e "s/$(head -n1 $(ls | head -n1) | cut -d, -f1-5)/$(head -n2 $(ls | head -n1) | cut -d, -f1-5 | tail -n1)/" | \
+    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '{tmp = $118; $118 = $119; $119 = $120; $120 = tmp; print $0}' | \
+    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" -f create_sent_timestamp.awk | \
+    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '{$1=$6; $2=$9; $6=$12; $7=$5; $5=$4; $4=$3; $3=$8; for (i=8; i<=NF-5; i++) { $i=$(i+5) }; NF-=6; print}' | \
+    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" 'NR == 1 {$1="participant_id"; $2="survey_type"; $3="sent_ts"; $4="start_ts"; $5="completed_ts"; $6="duration"; $7="has_finished"; print} NR>1 {print}' | \
+    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" 'length($1) > 0 {print} {}' | \
+    eval "sed $(grep S mitreids.csv | sed 's/\r$//' | sed -e 's@^\(.*\),\(.*\)$@-e "s/\2/\1/"@' | tr '\n' ' ')" | \
+    sed -e 's@,\([0-9]\{2\}\)/\([0-9]\{2\}\)/\([0-9]\{4\}\)@,\3-\1-\2@g' -e 's@,\([0-9]\{1\}\)/\([0-9]\{2\}\)/\([0-9]\{4\}\)@,\3-0\1-\2@g' -e 's@,\([0-9]\{2\}\)/\([0-9]\{1\}\)/\([0-9]\{4\}\)@,\3-\1-0\2@g' -e 's@,\([0-9]\{1\}\)/\([0-9]\{1\}\)/\([0-9]\{4\}\)@,\3-0\1-0\2@g' -e 's/\([0-9]\{2\}\) \([0-9]\{2\}\)/\1T\2/g' | \
+    gzip -9 > MGT.csv.gz
 
-cat > fix_missing_sent_time.awk <<EOF
-BEGIN {
-  FS=",";
-  OFS=",";
-  FPAT="([^,]*)|(\"[^\"]+\")"
-}
-length(\$4) == 0 && \$1 ~ /6am/ {
-  \$4 = "6:00am";
-  print
-}
-length(\$4) == 0 && \$1 ~ /6pm/ {
-  \$4 = "6:00pm";
-  print
-}
-length(\$4) == 0 && \$1 ~ /12am/ {
-  \$4 = "12:00am";
-  print
-}
-length(\$4) == 0 && \$1 ~ /12pm/ {
-  \$4 = "12:00pm"; print
-}
-{
-  print
-}
-EOF
-
-cat > reorder.awk <<EOF
-BEGIN {
-  FS=",";
-  OFS=",";
-  FPAT="([^,]*)|(\"[^\"]+\")"
-}
-length(\$2) > 0 {
-  \$3 = \$4 "T" \$3;
-  print \$2,\$1,\$3,\$7,\$8,\$83,$(for i in $(seq 11 82); do echo -n "\$$i,"; done | sed -e 's/,$//')
-}
-EOF
+aws s3 cp MGT.csv.gz s3://${TARGET_BUCKET}/surveys/raw/EMAs/job_personality_health-context_stress_anxiety_pand_bfid_sleep_ex_tob_alc_work_itpd_irbd_dalal.csv.gz
 
 
+
+## Histograms
+
+# Job
 zcat MGT.csv.gz | \
-  grep --binary-files=text -v '"SY' | \
-  sed 's/\r$//' | \
-  gawk -f remove_quotes.awk | \
-  sed -e 's/""//g' | \
-  gawk -f fix_missing_sent_time.awk | \
-  grep -E "(sourcefile|NIGHT|DAY)" | \
-  gawk -f subset.awk | \
-  sed -e 's/NA//g' -e 's@,\([0-9]\{1,2\}\)/\([0-9]\{1,2\}\)/\([0-9]\{4\}\)@,\3-\1-\2@g' -e 's/\([0-9]\{2\}\) \([0-9]\{2\}\)/\1T\2/g' | \
-  eval "sed $(grep S mitreids.csv | sed 's/\r$//' | sed -e 's@^\(.*\),\(.*\)$@-e "s/\2/\1/"@' | tr '\n' ' ')" | \
-  sed -e 's/surveytype/survey_type/' -e 's/Name/participant_id/' -e 's/6:00pm/18:00:00/' -e 's/6:00am/06:00:00/' -e 's/12:00pm/12:00:00/' -e 's/12:00am/00:00:00/' | \
-  gawk -f reorder.awk | \
-  sed -e 's/-\([0-9]\)-/-0\1-/' -e 's/-\([0-9]\)T/-0\1T/' | \
-  sed -e 's/DateTTimesent/sent_ts/' -e 's/StartDate/start_ts/' -e 's/EndDate/completed_ts/' -e 's/Finished/has_finished/' -e 's/Q_TotalDuration/duration/' | \
-  gzip > job_personality_health.csv.gz
+    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" "NR > 1 {print $(zcat MGT.csv.gz | head -n1 | tr , '\n' | nl | grep -v Time | awk '{print $1}' | tr '\n' ',' | sed -e 's/,$//' -e 's/,/,$/g' -e 's/^/$/')}" | \
+    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '{if (length($13) > 0 || length($14) > 0) $14=1; else $14=""; if (length($11) > 0 || length($12) > 0) $13=1; else $13=""; if (length($9) > 0 || length($10) > 0) $12=1; else $12=""; $11=$8; $10=$2; for (i=10; i <= NF; ++i) $(i-9)=$(i); NF=NF-9; print}' | \
+    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '$1 ~ /job/ {tmp=0; for (i=2; i<=17; ++i) if (length($(i)) > 0) ++tmp; N=17; if (length($43) > 0) {++tmp; if ($43 == 1) {N=43; for (i=44; i<=69; ++i) if (length($(i)) > 0) ++tmp;}} printf("%.1f\n", tmp / N * 100)}' | \
+    sort -n | \
+    uniq -c
 
-cat \
-  <(zcat job_personality_health.csv.gz | head -n1) \
-  <(zcat job_personality_health.csv.gz | \
-      tail -n +2 | \
-      awk -F, -v OFS=, '{tmp=$1; $1=$3; $3=$2; $2=tmp; print}' | \
-      sort | \
-      awk -F, -v OFS=, '{tmp=$1; $1=$2; $2=$3; $3=tmp; print}') | \
-  gzip | \
-  aws s3 cp - s3://${TARGET_BUCKET}/surveys/raw/EMAs/job_personality_health.csv.gz
+# health
+zcat MGT.csv.gz | \
+    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" "NR > 1 {print $(zcat MGT.csv.gz | head -n1 | tr , '\n' | nl | grep -v Time | awk '{print $1}' | tr '\n' ',' | sed -e 's/,$//' -e 's/,/,$/g' -e 's/^/$/')}" | \
+    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '{if (length($13) > 0 || length($14) > 0) $14=1; else $14=""; if (length($11) > 0 || length($12) > 0) $13=1; else $13=""; if (length($9) > 0 || length($10) > 0) $12=1; else $12=""; $11=$8; $10=$2; for (i=10; i <= NF; ++i) $(i-9)=$(i); NF=NF-9; print}' | \
+    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '$1 ~ /health/ {tmp=0; for (i=2; i<=17; ++i) if (length($(i)) > 0) ++tmp; for (i=28; i<=42; ++i) if (length($(i)) > 0) ++tmp; N=31; if ($31 == 2) N -= 7; if ($39 == 2) N -= 3; printf("%.1f\n", tmp / N * 100)}' | \
+    sort -n | \
+    uniq -c
+
+# Personality
+zcat MGT.csv.gz | \
+    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" "NR > 1 {print $(zcat MGT.csv.gz | head -n1 | tr , '\n' | nl | grep -v Time | awk '{print $1}' | tr '\n' ',' | sed -e 's/,$//' -e 's/,/,$/g' -e 's/^/$/')}" | \
+    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '{if (length($13) > 0 || length($14) > 0) $14=1; else $14=""; if (length($11) > 0 || length($12) > 0) $13=1; else $13=""; if (length($9) > 0 || length($10) > 0) $12=1; else $12=""; $11=$8; $10=$2; for (i=10; i <= NF; ++i) $(i-9)=$(i); NF=NF-9; print}' | \
+    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '$1 ~ /perso/ {tmp=0; for (i=2; i<=27; ++i) if (length($(i)) > 0) ++tmp; printf("%.1f\n", tmp / 26 * 100)}' | \
+    sort -n | \
+    uniq -c
+
+
 
 
 ## Surveys: RAW / Supplemental MGT
 
-aws s3 cp --recursive s3://${PROCESSED_BUCKET}/2_raw_csv_data/ground_truth/S-MGT/ .
 
-cat > remove_strings_psycap.py <<EOF
-import sys
-import pandas as pd
-data = pd.read_csv('psychological_capital_raw.csv.gz')
-for i in range(len(data)):
-    if i > 0:
-        l = data.iloc[i]["Location"]
-        act15 = data.iloc[i]["Activity15"]
-        if isinstance(l, str) and len(l) > 1:
-            data.at[i, "Location"] = r'\n'.join(filter(None, l.split('\n')))
-        if isinstance(act15, str) and len(act15) > 1:
-            data.at[i, "Activity15"] = r'\n'.join(filter(None, act15.split('\n')))
-data.to_csv(sys.stdout, index = False)
+aws s3 cp s3://${RAW_BUCKET}/app_surveys/app_surveys_updated.csv.gz .
+
+cat > extract_context_2.sed <<EOF
+# Getting rid of the one entry with a quote in it
+# NOTICE: if more of those single quote appear, then a more complex substitution is needed
+s/""\\(.*\\)'\\(.*\\)""/'\1´\2'/
+
+# Set of more than one context2 answers
+s/^\\(.*\\), '2': \\[\\(.*\\)\\]\\(.*\\)$/\\1\\3,\\"\\2\\"/
+s/^\\(.*\\)'2': \\[\\(.*\\)\\]\\(.*\\)$/\\1\\3,\\"\\2\\"/
+
+# Just one context2 answer
+s/^\\(.*\\), '2': \\([0-9]\\+\\)\\([^0-9].*\\)$/\\1\\3,\\"\\2\\"/
+s/^\\(.*\\)'2': \\([0-9]\\+\\)\\([^0-9].*\\)$/\\1\\3,\\"\\2\\"/
+
+# Free response context2 answer
+s/^\\(.*\\), '2': \\('[^']*'\\)\\(.*\\)$/\\1\\3,\\"\\2\\"/
+s/^\\(.*\\)'2': \\('[^']*'\\)\\(.*\\)$/\\1\\3,\\"\\2\\"/
+
+# Cleanup the timezone offset
+s/"tzoffset(None, \\(-\?[0-9]*\\))"/\\1/g
 EOF
 
-cat > fix_dates_and_fields_psycap.awk <<EOF
-BEGIN {
-  FS = ",";
-  OFS = ",";
-  FPAT = "([^,]*)|(\"[^\"]+\")";
-}
-
-NR == 1 {
-  \$1 = \$2;
-  \$2 = "survey_type";
-  \$3 = "sent_ts";
-  print
-}
-NR > 1 {
-  datecmd = "date --date=\""\$4"\" +%Y-%m-%dT%H:%M:%S";
-  datecmd | getline timestamp;
-  close(datecmd);
-  \$4 = timestamp;
-  \$3 = \$1;
-  \$1 = \$2;
-  \$2 = "engage_psycap";
-  print
-}
-EOF
-
-python remove_strings_psycap.py | \
-  grep -v ',SY' | \
-  sed -e 's/\([0-9]\{2\}\) \([0-9]\{2\}\)/\1T\2/' -e 's/\.000//' | \
-  cut -d',' -f1-3,5- | \
-  gawk -f fix_dates_and_fields_psycap.awk | \
-  gzip > psychological_capital.csv.gz
-
-
-cat \
-  <(zcat psychological_capital.csv.gz | head -n1) \
-  <(zcat psychological_capital.csv.gz | \
-      tail -n +2 | \
-      awk -F, -v OFS=, '{tmp=$1; $1=$3; $3=$2; $2=tmp; print}' | \
-      sort | \
-      awk -F, -v OFS=, '{tmp=$1; $1=$2; $2=$3; $3=tmp; print}') | \
-  gzip | \
-  aws s3 cp - s3://${TARGET_BUCKET}/surveys/raw/EMAs/psychological_capital.csv.gz
-
-
-# 
-# cat > remove_strings_psyflex.py <<EOF
-# import csv
-# with open('psychological_flexibility_raw.csv') as csvfile:
-#     pc = csv.reader(csvfile, delimiter=',', quotechar='"')
-#     for ct, row in enumerate(pc):
-#         if ct > 0 and len(row[7]) > 1:
-#             row[7] = ''
-#         print(','.join(row))
-# EOF
-
-cat > remove_strings_psyflex.py <<EOF
-import sys
-import pandas as pd
-data = pd.read_csv('psychological_flexibility_raw.csv.gz')
-data = data.rename(columns = { 'Actvity': 'Activity' })
-for i in range(len(data)):
-    if i > 0:
-        act = data.iloc[i]["Activity"]
-        if isinstance(act, str) and len(act) > 1:
-            data.at[i, "Activity"] = r'\n'.join(filter(None, act.split('\n')))
-data.to_csv(sys.stdout, index = False)
-EOF
-
-cat > fix_dates_and_fields_psyflex.awk <<EOF
+# timezone offset in hours
+# every timestamps in PT (except ingested_ts_utc we don't need) => bottleneck
+# NOTE: assumes the local timezone is America/Los_Angeles (for the utility `date`)
+cat > fix_time.awk <<EOF
 BEGIN {
   FS = ",";
   OFS = ",";
   FPAT = "([^,]*)|(\"[^\"]+\")";
 }
 NR == 1 {
-  \$1 = \$2;
-  \$2 = \$3;
-  \$3 = "sent_ts";
-  print
+    \$5  = gensub(/_utc$/, "", "g", \$5);
+    \$6  = gensub(/_utc$/, "", "g", \$6);
+    \$8  = gensub(/_utc$/, "", "g", \$8);
+    print
 }
 NR > 1 {
-  datecmd = "date --date=\""\$4"\" +%Y-%m-%dT%H:%M:%S";
-  datecmd | getline timestamp;
-  close(datecmd);
-  \$4 = timestamp;
-  tmp= \$1;
-  \$1 = \$2;
-  \$2 = \$3;
-  \$3 = tmp;
-  print
+    if (length(\$7) > 0) {
+        \$7 = (\$7+0) / 3600;
+    }
+    if (length(\$9) > 0) {
+        \$9 = (\$9+0) / 3600;
+    }
+    if (length(\$5) > 0) {
+        cmd = "date --date=\""\$5"\" +%Y-%m-%dT%H:%M:%S";
+        cmd | getline tmp;
+        close(cmd);
+        \$5 = tmp;
+    }
+    if (length(\$6) > 0) {
+        cmd = "date --date=\""\$6"\" +%Y-%m-%dT%H:%M:%S";
+        cmd | getline tmp;
+        close(cmd);
+        \$6 = tmp;
+    }
+    if (length(\$8) > 0) {
+        cmd = "date --date=\""\$8"\" +%Y-%m-%dT%H:%M:%S";
+        cmd | getline tmp;
+        close(cmd);
+        \$8 = tmp;
+    }
+    print
+}
+EOF
+
+# Context2 is stored as an array of checked checkboxes indices, and we convert that to a csv
+# We also clean up the string of the free response text (15th context2)
+cat > split_context_2.awk <<EOF
+BEGIN {
+  FS = ",";
+  OFS = ",";
+  FPAT = "([^,]*)|(\"[^\"]+\")";
+}
+NR == 1 {
+    for (i=1; i<=15; ++i)
+        \$(12+1+i)="context2_"i
+    print
+}
+NR > 1 {
+    if (NF >= 12) {
+        NF=12+1+15;
+        context2 = substr(\$12, 2, length(\$12) - 2);
+        if (context2 ~ /[a-zA-Z]/) {
+            context2 = substr(\$12, 3, length(\$12) - 4);
+            while (match(context2, /^( |\\\\n)(.*)$/, tmp) != 0) {
+                context2=tmp[2];
+            }
+            while (match(context2, /^(.*)( |\\\\n)$/, tmp) != 0) {
+                context2=tmp[1];
+            }
+            \$(12+1+15)="\\""context2"\\""
+        } else {
+            context2 = gensub(/'/, "", "g", context2);
+            context2 = gensub(/\.0/, "", "g", context2);
+            n = split(context2, tmp, ", ");
+            for (i=1; i<=n; ++i) {
+                \$(13+tmp[i]+1)=1;
+            }
+        }
+        \$12 = "\\""context2"\\""
+    }
+    print
 }
 EOF
 
 
-python remove_strings_psyflex.py | \
-  grep -v ',SY' | \
-  sed -e 's/\([0-9]\{2\}\) \([0-9]\{2\}\)/\1T\2/' -e 's/\.000//' | \
-  cut -d',' -f1,3,5,7- | \
-  gawk -f fix_dates_and_fields_psyflex.awk | \
-  gzip > psychological_flexibility.csv.gz
-  
-  
-cat \
-  <(zcat psychological_flexibility.csv.gz | head -n1) \
-  <(zcat psychological_flexibility.csv.gz | \
-      tail -n +2 | \
-      awk -F, -v OFS=, '{tmp=$1; $1=$3; $3=$2; $2=tmp; print}' | \
-      sort | \
-      awk -F, -v OFS=, '{tmp=$1; $1=$2; $2=$3; $3=tmp; print}') | \
-  gzip | \
-  aws s3 cp - s3://${TARGET_BUCKET}/surveys/raw/EMAs/psychological_flexibility.csv.gz
+cat > split_all_fields.awk <<EOF
+BEGIN {
+  FS = ",";
+  OFS = ",";
+  FPAT = "([^,]*)|(\"[^\"]+\")";
+}
+NR == 1 {
+    \$13="context1";
+    for (i = 3; i<=29; ++i)
+        \$(13+15+i-2) = i;
+    print
+}
+NR > 1 {
+    n = patsplit(substr(\$11, 3, length(\$11) - 4), tmp, "'[0-9][0-9]*': (([^',]+)|('[^']+'))");
+    for (i=1; i<=n; ++i) {
+        split(substr(tmp[i], 2, length(tmp[i]) - 1), data, "': ");
+        if (data[2] ~ /^'[0-9]+'$/)
+            data[2] = substr(data[2], 2, length(data[2]) - 2);
+        if (data[2] ~ /^'.*[a-zA-Z].*'$/)
+            data[2] = "\\""substr(data[2], 2, length(data[2]) - 2)"\\"";
 
+        if (data[1] == 1) {
+            if (data[2] ~ /"/) {
+                data[2] = substr(data[2], 2, length(data[2]) - 2);
+                while (match(data[2], /^( |\\\\n)(.*)$/, tmp) != 0) {
+                    data[2]=tmp[2];
+                }
+                while (match(data[2], /^(.*)( |\\\\n)$/, tmp) != 0) {
+                    data[2]=tmp[1];
+                }
+                \$13 = "\\""data[2]"\\"";
+            } else {
+                \$13 = data[2];
+            }
+        } else {
+            \$(13+15+data[1]-2) = data[2];
+        }
+    }
+    print
+}
+EOF
+
+# Cleanup: removing unused fields
+cat > cleanup.awk <<EOF
+BEGIN {
+  FS = ",";
+  OFS = ",";
+  FPAT = "([^,]*)|(\"[^\"]+\")";
+}
+{
+    \$1 = \$2;
+    \$2 = \$3;
+    for (i = 5; i <= 9; ++i)
+        \$(i-2) = \$i;
+    for (i = 13; i <= NF; ++i)
+        \$(i-5) = \$i;
+    if (NF <= 11)
+        NF = NF - 4;
+    else 
+        NF = NF-5;
+    print
+}
+EOF
+
+zcat app_surveys_updated.csv.gz | \
+    grep -v -E ",2018-0(2-[0-9][0-9]|3-0[1-4])," | \
+    sed -f extract_context_2.sed | \
+    gawk -f fix_time.awk | \
+    gawk -f split_context_2.awk | \
+    gawk -f split_all_fields.awk | \
+    gawk -f cleanup.awk > app_surveys_cleaned.csv
+
+
+# Psychological Capital
+
+# Name the columns, and remove the unused ones
+cat > psycap.awk <<EOF
+BEGIN {
+  FS = ",";
+  OFS = ",";
+  FPAT = "([^,]*)|(\"[^\"]+\")";
+}
+NR == 1 {
+    \$(7+1) = "Location";
+    \$(7+2) = "Activity";
+    for (i = 1; i <= 3; ++i)
+        \$(7+2+i) = "Engage"i;
+    for (i = 1; i <= 12; ++i)
+        \$(7+2+3+i) = "Psycap"i;
+    for (i = 1; i <= 3; ++i)
+        \$(7+2+3+12+i) = "IS"i;
+    for (i = 1; i <= 5; ++i)
+        \$(7+2+3+12+3+i) = "CS"i;
+    for (i = 1; i <= 4; ++i)
+        \$(7+2+3+12+3+5+i) = "HS"i;
+    
+    NF_final = 6+2+3+12+3+5+4;
+    for (i = 3; i <= NF_final + 1; ++i)
+        \$(i-1) = \$(i);
+    NF = NF_final;
+    print
+}
+\$2 ~ /engage_psycap/ {
+    if (NF > 7) {
+#         \$(7+1) = \$(7+1);
+        if (length(\$(7+1+15)) > 0) {
+            \$(7+2) = \$(7+1+15);
+        } else {
+            tmp = 0;
+            for (i = 1; i <= 14; ++i)
+                tmp += i * \$(7+1+i);
+            if (tmp == 0)
+                \$(7+2) = "";
+            else
+                \$(7+2) = tmp;
+        }
+        for (i = 1; i <= 3; ++i)
+            \$(7+2+i) = \$(7+1+15+i);
+        for (i = 1; i <= 12; ++i)
+            \$(7+2+3+i) = \$(7+1+15+3+i);
+        for (i = 1; i <= 3; ++i)
+            \$(7+2+3+12+i) = \$(7+1+15+3+12+i);
+        for (i = 1; i <= 5; ++i)
+            \$(7+2+3+12+3+i) = \$(7+1+15+3+12+3+i);
+        for (i = 1; i <= 4; ++i)
+            \$(7+2+3+12+3+5+i) = \$(7+1+15+3+12+3+5+i);
+    }
+    for (i = 3; i <= NF; ++i)
+        \$(i-1) = \$(i);
+    NF = 6+2+3+12+3+5+4;
+    print
+}
+EOF
+
+# Sort the rows using awk and sort, by survey send time
+cat > sort_csv_k2k1.awk <<EOF
+BEGIN {
+  FS = ",";
+  OFS = ",";
+  FPAT = "([^,]*)|(\"[^\"]+\")";
+}
+NR == 1 {
+    print
+}
+NR > 1 {
+    print | "sort --field-separator=',' -k2,2 -k1,1"
+}
+EOF
+
+gawk -f psycap.awk app_surveys_cleaned.csv | \
+    gawk -f sort_csv_k2k1.awk | \
+    gzip -9 > psychological_capital.csv.gz
+
+aws s3 cp psychological_capital.csv.gz s3://${TARGET_BUCKET}/surveys/raw/EMAs/psychological_capital-Psycap_Location_Activity_Engage_IS_CS_HS.csv.gz
+
+# Histogram:
+zcat psychological_capital.csv.gz | \
+    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" 'NR > 1 {tmp = 0; for (i = 7; i <= NF; ++i) if (length($(i)) > 0) tmp++; printf("%.1f\n", tmp / (NF - 7 + 1) * 100)}' | \
+    sort -n | uniq -c
+
+# Psychological Flexibility
+
+# Name the columns, and remove the unused ones
+cat > psyflex.awk <<EOF
+BEGIN {
+  FS = ",";
+  OFS = ",";
+  FPAT = "([^,]*)|(\"[^\"]+\")";
+}
+NR == 1 {
+    \$(7+1) = "Activity";
+    for (i = 1; i <= 14; ++i)
+        \$(7+1+i) = "Experience"i;
+    for (i = 1; i <= 13; ++i)
+        \$(7+1+14+i) = "PF"i;
+    
+    NF_final = 6+1+14+13;
+    for (i = 3; i <= NF_final + 1; ++i)
+        \$(i-1) = \$(i);
+    NF = NF_final;
+    print
+}
+\$2 ~ /psych_flex/ {
+    if (NF > 7) {
+#         \$(7+1) = \$(7+1);
+#         for (i = 1; i <= 14; ++i)
+#             \$(7+1+i) = \$(7+1+i);
+        for (i = 1; i <= 13; ++i)
+            \$(7+1+14+i) = \$(7+1+15+i);
+    }
+    for (i = 3; i <= NF; ++i)
+        \$(i-1) = \$(i);
+    NF = 6+1+14+13;
+    print
+}
+EOF
+
+gawk -f psyflex.awk app_surveys_cleaned.csv | \
+    gawk -f sort_csv_k2k1.awk | \
+    gzip -9 > psychological_flexibility.csv.gz
+
+aws s3 cp psychological_flexibility.csv.gz s3://${TARGET_BUCKET}/surveys/raw/EMAs/psychological_flexibility-Activity_Experience_PF.csv.gz
+
+
+# Histogram:
+zcat psychological_flexibility.csv.gz | \
+    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" 'NR > 1 {tmp = 0; for (i = 1; i <= 14; ++i) if (length($(6+1+i)) > 0) tmp = 1; if (length($(6+1)) > 0) ++tmp; for (i = 1; i <= 13; ++i) if (length($(6+1+14+i)) > 0) tmp++; printf("%.1f\n", tmp / 15 * 100)}' | \
+    sort -n | uniq -c
 
 
 
@@ -370,36 +623,47 @@ cat \
 aws s3 cp s3://${PROCESSED_BUCKET}/id-mapping/mitreids.csv .
 aws s3 cp --recursive s3://${RAW_BUCKET}/ground_truth/IGTB/ .
 
-rm USC_PILOT_IGTB.csv
+# rm USC_PILOT_IGTB.csv
+mv USC_PILOT_IGTB.csv pilot.csv
 mv USC_DAY_IGTB.csv day.csv
 mv USC_NIGHT_IGTB.csv night.csv
 
-cut -d',' -f3,8-10,12- day.csv | \
-  eval "sed $(grep S mitreids.csv | sed 's/\r$//' | sed -e 's@^\(.*\),\(.*\)$@-e "s/\2/\1/"@' | tr '\n' ' ')" | \
-  sed -e 's/\([0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}\) /\1T/g' > igtb_evidation.csv
+MITREID_SED="sed $(grep S mitreids.csv | sed 's/\r$//' | sed -e 's@^\(.*\),\(.*\)$@-e "s/\2/\1/"@' | tr '\n' ' ')"
+FILENAME="part_one-demo_abs_vocab_gats_audit_psqi_ipaq_iod_ocb_irb_itp_bfi_pan_stai.csv"
 
-#FIXME: Some scales (e.g. PANAS / BFI) do not have a completion time
-FILENAME="$(head -n1 igtb_evidation.csv | tr , '\n' | grep complete | sed -e 's/_complete//' | tr '\n' _ | sed -e 's/_$//').csv"
+cat > dates_location_fields.sed <<EOF
+# Dates
+s/\([0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}\) /\1T/g
 
-cut -d',' -f3,8-10,12- night.csv | \
-  eval "sed $(grep S mitreids.csv | sed 's/\r$//' | sed -e 's@^\(.*\),\(.*\)$@-e "s/\2/\1/"@' | tr '\n' ' ')" | \
-  sed -e 's/\([0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}\) /\1T/g' | \
-  tail -n +3 >> igtb_evidation.csv
+# Remove the last 4 fields (3 locations, 1 empty)
+s/,[^,]*,[^,]*,[^,]*,[^,]*\$//
 
-mv igtb_evidation.csv $FILENAME
-sed -e 's/V3/participant_id/' -e 's/V8/start_ts/' -e 's/V9/completed_ts/' -e 's/V10/finished/' $FILENAME | \
-  gzip > $FILENAME.gz
+# Rename some fields
+s/V3/participant_id/
+s/V8/start_ts/
+s/V9/completed_ts/
+s/V10/finished/
 
+# Cleanup some fields
+s/ \\+,/,/g
+EOF
+
+
+# Remove some useless fields
+# Convert participant_id
+# Convert dates
+# Remove location
+# Rename some fields
+cat day.csv <(tail -n+3 night.csv) <(tail -n+3 pilot.csv) | \
+    cut -d',' -f3,8-10,12- | \
+    eval $MITREID_SED | \
+    sed -f dates_location_fields.sed > $FILENAME
 
 # Sort & upload
-cat <(zcat $FILENAME.gz | head -n2) <(zcat $FILENAME.gz | tail -n +3 | sort) | \
-  gzip | \
+cat <(cat $FILENAME | head -n2) <(cat $FILENAME | tail -n+3 | sort) | \
+  gzip -9 | \
   aws s3 cp - s3://${TARGET_BUCKET}/surveys/raw/baseline/$FILENAME.gz
 
-  
-
-# gzip ./*
-# aws s3 sync . s3://${TARGET_BUCKET}/surveys/raw/IGTB/
 
 
 ## Surveys: RAW / Pre-Study
@@ -450,39 +714,112 @@ aws s3 cp --recursive s3://${PROCESSED_BUCKET}/3_preprocessed_data/ground_truth/
 aws s3 cp s3://${PROCESSED_BUCKET}/id-mapping/mitreids.csv .
 
 cd tmp
-mv alc.d.csv.gz alcool.csv.gz
+mv alc.d.csv.gz alc.csv.gz
 mv anxiety.d.csv.gz anxiety.csv.gz
-mv bfi.d1.csv.gz personality.csv.gz
-mv dalal.csv.gz ocb_dwb.csv.gz
-mv exercise.d.csv.gz exercise.csv.gz
-mv irb.d.csv.gz task_performance_irb.csv.gz
-mv itp.d.csv.gz task_performance_itp.csv.gz
-mv pan.d.csv.gz affect.csv.gz
-mv sleep.d.csv.gz sleep.csv.gz
-mv stress.d.csv.gz stress.csv.gz
-mv tob.d.csv.gz tobacco.csv.gz
-mv worktoday.csv.gz worked_today.csv.gz
+mv bfi.d1.csv.gz bfid.csv.gz
+mv exercise.d.csv.gz ex.csv.gz
+mv irb.d.csv.gz irbd.csv.gz
+mv itp.d.csv.gz itpd.csv.gz
+mv pan.d.csv.gz pand.csv.gz
+mv sleep.d.csv.gz sleepd.csv.gz
+mv stress.d.csv.gz stressd.csv.gz
+mv tob.d.csv.gz tob.csv.gz
+mv worktoday.csv.gz work.csv.gz
 cd ..
+
+cat > mgt_fix.sed <<EOF
+# Fix dates from the weird [M]M/[D]D/YYYY to YYYY-MM-DD
+s@\([0-9]\{1\}\)/\([0-9]\{1\}\)/\([0-9]\{4\}\)@\3-0\1-0\2@g
+s@\([0-9]\{2\}\)/\([0-9]\{1\}\)/\([0-9]\{4\}\)@\3-\1-0\2@g
+s@\([0-9]\{1\}\)/\([0-9]\{2\}\)/\([0-9]\{4\}\)@\3-0\1-\2@g
+s@\([0-9]\{2\}\)/\([0-9]\{2\}\)/\([0-9]\{4\}\)@\3-\1-\2@g
+
+# Remove quotes
+s/"//g
+
+# Uniformize timestamps with a "T" in the middle
+s/ /T/g
+
+# Fix common field names
+s/ID/participant_id/
+s/start/start_ts/
+s/end/completed_ts/
+
+# Fix timestamps without seconds
+s/\(T[0-9]\{2\}:[0-9]\{2\}\),/\1:00,/g
+
+# Remove "NA"s
+s/,NA/,/g
+
+# Fix specific scales
+
+# Alcool
+s/alc_status/alc_Status/
+s/alc.quantity.d/alc_Quantity/
+
+# Anxiety
+s/anxiety.d/anxiety/
+
+# BFId
+s/extraversion.d/bfid_Extraversion/
+s/agreeableness.d/bfid_Agreeableness/
+s/conscientiousness.d/bfid_Conscientiousness/
+s/neuroticism.d/bfid_Neuroticism/
+s/openness.d/bfid_Openness/
+
+# DALAL (with DNW removed)
+s/ocb.d/dalal_OCBD/
+s/cwb.d/dalal_CWBD/
+s/,DNW/,/g
+
+# Ex
+s/total.pa.d/ex_Total/
+
+# IRBd
+s/irb.d/irbd/
+
+# ITPd
+s/itp.d/itpd/
+
+# PANd
+s/pos.affect.d/pand_PosAffect/
+s/neg.affect.d/pand_NegAffect/
+
+# SLEEPd
+s/sleep.d/sleepd/
+
+# STRESSd
+s/stress.d/stressd/
+
+# TOBd
+s/tob_status/tob_Status/
+s/tob.quantity.d/tob_Quantity/
+EOF
+
+cat > csv_sort_k3_k1.awk <<EOF
+BEGIN {
+    FS = ",";
+    OFS = ",";
+}
+NR == 1 {
+    print
+}
+NR > 1 {
+    print | "sort --field-separator=',' -k3,3 -k1,1"
+}
+EOF
 
 for f in tmp/*csv.gz
 do
   zcat $f | \
-    grep -v '^"SY' | \
+    grep -v -E ",2018-0(2-[0-9][0-9]|3-0[1-4])," | \
     eval "sed $(grep S mitreids.csv | sed 's/\r$//' | sed -e 's@^\(.*\),\(.*\)$@-e "s/\2/\1/"@' | tr '\n' ' ')" | \
-    sed -e 's@\([0-9]\{1\}\)/\([0-9]\{1\}\)/\([0-9]\{4\}\)@\3-0\1-0\2@g' -e 's@\([0-9]\{2\}\)/\([0-9]\{1\}\)/\([0-9]\{4\}\)@\3-\1-0\2@g' -e 's@\([0-9]\{1\}\)/\([0-9]\{2\}\)/\([0-9]\{4\}\)@\3-0\1-\2@g' -e 's@\([0-9]\{2\}\)/\([0-9]\{2\}\)/\([0-9]\{4\}\)@\3-\1-\2@g' | \
-    sed -e 's/"//g' -e 's/ /T/g' -e 's/ID/participant_id/' -e 's/start/start_ts/' -e 's/end/completed_ts/' | \
+    sed -f mgt_fix.sed | \
     cut -d, -f1,2,4- | \
-    gzip > ${f//tmp\//}
-  
-  cat \
-  <(zcat ${f//tmp\//} | head -n1) \
-  <(zcat ${f//tmp\//} | \
-      tail -n +2 | \
-      awk -F, -v OFS=, '{tmp=$1; $1=$3; $3=$2; $2=tmp; print}' | \
-      sort | \
-      awk -F, -v OFS=, '{tmp=$1; $1=$2; $2=$3; $3=tmp; print}') | \
-    gzip | \
-    aws s3 cp - s3://${TARGET_BUCKET}/surveys/scored/EMAs/${f//tmp\//}
+    awk -f csv_sort_k3_k1.awk | \
+    gzip -9 > ${f//tmp\//}
+    
+    aws s3 cp ${f//tmp\//} s3://${TARGET_BUCKET}/surveys/scored/EMAs/
 done
 
 
@@ -490,39 +827,84 @@ done
 
 aws s3 cp --recursive s3://${PROCESSED_BUCKET}/3_preprocessed_data/ground_truth/S-MGT/ .
 
-zcat psychological_capital_scored.csv.gz | \
-  grep -v ',SY' | \
-  sed -e 's/ /T/' -e 's/\.000//' | \
-  cut -d',' -f1-3,5- | \
-  awk 'BEGIN {FS=","; OFS=",";} NR == 1 {$1=$2; $2="survey_type"; $3="sent_ts"; $4="completed_ts"; print} NR > 1 {datecmd = "date --date=\""$4"\" +%Y-%m-%dT%H:%M:%S"; datecmd | getline timestamp; close(datecmd); $4=timestamp; $3=$1; $1=$2; $2="engage_psycap"; print}' | \
-  gzip > psychological_capital.csv.gz
+cat > psycap_fix_and_sort.awk <<EOF
+BEGIN {
+    FS=",";
+    OFS=",";
+}
+NR == 1 {
+    \$1=\$2;
+    \$2="survey_type";
+    \$3="sent_ts";
+    \$4="completed_ts";
+    \$5="psycap";
+    \$6="engage";
+    \$7="is";
+    \$8="cs";
+    \$9="hs";
+    print
+}
+NR > 1 {
+    datecmd = "date --date=\""\$4"\" +%Y-%m-%dT%H:%M:%S";
+    datecmd | getline timestamp;
+    close(datecmd);
+    \$4=timestamp;
+    \$3=\$1;
+    \$1=\$2;
+    \$2="engage_psycap";
+    print | "sort --field-separator=',' -k3,3 -k1,1"
+}
+EOF
 
-cat \
-  <(zcat psychological_capital.csv.gz | head -n1) \
-  <(zcat psychological_capital.csv.gz | \
-      tail -n +2 | \
-      awk -F, -v OFS=, '{tmp=$1; $1=$3; $3=$2; $2=tmp; print}' | \
-      sort | \
-      awk -F, -v OFS=, '{tmp=$1; $1=$2; $2=$3; $3=tmp; print}') | \
-  gzip | \
-  aws s3 cp - s3://${TARGET_BUCKET}/surveys/scored/EMAs/psychological_capital.csv.gz
+zcat psychological_capital_scored.csv.gz | \
+    grep -v -E "^2018-0(2-[0-9][0-9]|3-0[1-4])" | \
+    sed -e 's/ /T/' -e 's/\.000//' -e 's/\r$//' | \
+    cut -d',' -f1-3,5- | \
+    awk -f psycap_fix_and_sort.awk | \
+    gzip -9 > psychological_capital.csv.gz
+
+aws s3 cp psychological_capital.csv.gz s3://${TARGET_BUCKET}/surveys/scored/EMAs/psycap_engage_is_cs_hs.csv.gz
+
+
+cat > psyflex_fix_and_sort.awk <<EOF
+BEGIN {
+    FS=",";
+    OFS=",";
+}
+NR == 1 {
+    \$1=\$2;
+    \$2=\$3;
+    \$3="sent_ts";
+    \$4="completed_ts";
+    \$5="pf";
+    \$6="experience_Negative";
+    \$7="experience_Positive";
+    \$8="experience_Neutral";
+    \$9="experience_Negative1";
+    print
+}
+NR > 1 {
+    datecmd = "date --date=\""\$4"\" +%Y-%m-%dT%H:%M:%S";
+    datecmd | getline timestamp;
+    close(datecmd);
+    \$4=timestamp;
+    tmp=\$1;
+    \$1=\$2;
+    \$2=\$3;
+    \$3=tmp;
+    print | "sort --field-separator=',' -k3,3 -k1,1"
+}
+EOF
 
 zcat psychological_flexibility_scored.csv.gz | \
-  grep -v ',SY' | \
-  sed -e 's/\([0-9]\) /\1T/' -e 's/\.000//' | \
-  cut -d',' -f2,4,5,7- | \
-  awk 'BEGIN {FS=","; OFS=",";} NR == 1 {$1=$2; $2=$3; $3="sent_ts"; $4="completed_ts"; print} NR > 1 {datecmd = "date --date=\""$4"\" +%Y-%m-%dT%H:%M:%S"; datecmd | getline timestamp; close(datecmd); $4=timestamp; tmp=$1; $1=$2; $2=$3; $3=tmp; print}' | \
-  gzip > psychological_flexibility.csv.gz
+    grep -v -E "^2018-0(2-[0-9][0-9]|3-0[1-4])" | \
+    sed -e 's/\([0-9]\) /\1T/' -e 's/\.000//' -e 's/\r$//' | \
+    cut -d',' -f2,4,5,7- | \
+    awk -f psyflex_fix_and_sort.awk | \
+    gzip -9 > psychological_flexibility.csv.gz
 
-cat \
-  <(zcat psychological_flexibility.csv.gz | head -n1) \
-  <(zcat psychological_flexibility.csv.gz | \
-      tail -n +2 | \
-      awk -F, -v OFS=, '{tmp=$1; $1=$3; $3=$2; $2=tmp; print}' | \
-      sort | \
-      awk -F, -v OFS=, '{tmp=$1; $1=$2; $2=$3; $3=tmp; print}') | \
-  gzip | \
-  aws s3 cp - s3://${TARGET_BUCKET}/surveys/scored/EMAs/psychological_flexibility.csv.gz
+
+aws s3 cp - s3://${TARGET_BUCKET}/surveys/scored/EMAs/psychological_flexibility.csv.gz
 
 
 ## Surveys: Scored / IGTB
@@ -530,16 +912,102 @@ cat \
 aws s3 cp s3://${PROCESSED_BUCKET}/3_preprocessed_data/ground_truth/IGTB/igtb.csv.gz .
 aws s3 cp s3://${PROCESSED_BUCKET}/id-mapping/mitreids.csv .
 
+cat > reorder_and_rename_fields.awk <<EOF
+BEGIN {
+    FS=",";
+    OFS=",";
+}
+NR == 1 {
+    \$3 = "abs";
+    \$4 = "vocab";
+    
+    \$5 = "gats_Status";
+    \$6 = "gats_Quantity";
+    \$7 = "gats_Quantity_Sub";
+    
+    \$8 = "audit";
+    \$9 = "psqi";
+    \$10 = "ipaq";
+    \$11 = "iod_ID";
+    \$12 = "iod_OD";
+    
+    \$13 = "ocb";
+    \$14 = "irb";
+    \$15 = "itp";
+    
+    \$16 = "bfi_Neuroticism";
+    \$17 = "bfi_Conscientiousness";
+    \$18 = "bfi_Extraversion";
+    \$19 = "bfi_Agreeableness";
+    \$20 = "bfi_Openness";
+    
+    \$21 = "pan_PosAffect";
+    \$22 = "pan_NegAffect";
+    
+    \$23 = "stai";
+
+    print
+}
+NR > 1 {
+    tmp = \$4;
+    \$4 = \$3;
+    \$3 = tmp;
+    
+    tmp14 = \$5;
+    tmp15 = \$6;
+    tmp13 = \$7;
+    \$5 = \$19;
+    \$6 = \$20;
+    \$7 = \$21;
+    
+    tmp11 = \$8;
+    \$8 = \$18;
+    
+    tmp12 = \$9;
+    \$9 = \$23;
+  
+    tmp18 = \$10;
+    \$10 = \$22;
+    
+    tmp19 = \$11;
+    tmp17 = \$12;
+    \$11 = tmp11;
+    \$12 = tmp12;
+  
+    tmp16 = \$13;
+    tmp20 = \$14;
+    tmp21 = \$15;
+    \$13 = tmp13;
+    \$14 = tmp14;
+    \$15 = tmp15;
+    
+    tmp22 = \$16;
+    tmp23 = \$17;
+    \$16 = tmp16;
+    \$17 = tmp17;
+    \$18 = tmp18;
+    \$19 = tmp19;
+    \$20 = tmp20;
+    
+    \$21 = tmp21;
+    \$22 = tmp22;
+    
+    \$23 = tmp23;
+    
+    print
+}
+EOF
+
 zcat igtb.csv.gz | \
-  grep -v 'SY[0-9]\{4\}' | \
   eval "sed $(grep S mitreids.csv | sed 's/\r$//' | sed -e 's@^\(.*\),\(.*\)$@-e "s/\2/\1/"@' | tr '\n' ' ')" | \
   sed -e 's/ID/participant_id/' -e 's/date_time/start_ts/' -e 's/"//g' -e 's/NA//g' -e 's/\([0-9]\) /\1T/' | \
+  awk -f reorder_and_rename_fields.awk | \
   gzip > vocab_gats_audit_psqi_iod_ocb_irb_itp_stai.csv.gz
 
   
 cat <(zcat vocab_gats_audit_psqi_iod_ocb_irb_itp_stai.csv.gz | head -n1) <(zcat vocab_gats_audit_psqi_iod_ocb_irb_itp_stai.csv.gz | tail -n +2 | sort) | \
-  gzip | \
-  aws s3 cp - s3://${TARGET_BUCKET}/surveys/scored/baseline/vocab_gats_audit_psqi_iod_ocb_irb_itp_stai.csv.gz
+  gzip -9 | \
+  aws s3 cp - s3://${TARGET_BUCKET}/surveys/scored/baseline/part_one-abs_vocab_gats_audit_psqi_ipaq_iod_ocb_irb_itp_bfi_pan_stai.csv.gz
 
 
 ## Surveys: Scored / Pre-Study
