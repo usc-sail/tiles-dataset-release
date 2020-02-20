@@ -27,18 +27,20 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import tikzplotlib
 
+bins = [float(x)/20 for x in range(0,21)]
+
 def CountValidResponses(df, survey_type):
    num_valid_responses = df.shape[0]*[np.nan]
    num_possible_responses = df.shape[0]*[np.nan]
    for row_idx in range(df.shape[0]):
       row = df.iloc[row_idx,:]
       if survey_type == 'job':
-         if str(row['work']) == '2': # Did not work that day, ignore work questions
+         if str(row['work']) == str(float(2)): # Did not work that day, ignore work questions
             row = row.drop(['itpd1', 'itpd2', 'irbd1', 'irbd2', 'irbd3', 'irbd4', 'irbd5', 'irbd6', 'irbd7', 'dalal1', 'dalal2', 'dalal3', 'dalal4', 'dalal5', 'dalal6', 'dalal7', 'dalal8', 'dalal9', 'dalal10', 'dalal11', 'dalal12', 'dalal13', 'dalal14', 'dalal15', 'dalal16'])
       elif survey_type == 'health':
-         if str(row['tob1']) == '2': # Did not consume tobacco, ignore tobacco questions
+         if str(row['tob1']) == str(float(2)): # Did not consume tobacco, ignore tobacco questions
             row = row.drop(['tob2_1', 'tob2_2', 'tob2_3', 'tob2_4', 'tob2_5', 'tob2_6', 'tob2_7'])
-         if str(row['alc1']) == '2': # Did not consume alcohol, ignore alcohol questions
+         if str(row['alc1']) == str(float(2)): # Did not consume alcohol, ignore alcohol questions
             row = row.drop(['alc2_1', 'alc2_2', 'alc2_3'])
       elif survey_type == 'personality':
          pass # No questions to cull
@@ -60,12 +62,12 @@ def ComputeSurveyCompliance(root_data_path, tikz_out_folder=None):
    #################
    # IGTB compliance
    #################
-   igtb_file = os.path.join(root_data_path,'surveys','scored','IGTB','IGTB.csv.gz')
+   igtb_file = os.path.join(root_data_path,'surveys','scored','baseline','part_one-abs_vocab_gats_audit_psqi_ipaq_iod_ocb_irb_itp_bfi_pan_stai.csv.gz')
    igtb_df = pd.read_csv(igtb_file)
-   igtb_df.loc[igtb_df.ID == 'SD1025', 'igtb_incomplete'] = 0 # This particpant did complete, but forgot to click submit
+   igtb_df.loc[igtb_df.participant_id == 'SD1025', 'igtb_incomplete'] = 0 # This particpant did complete, but forgot to click submit
    igtb_num_total = igtb_df.shape[0]
    igtb_num_complete = igtb_num_total - np.sum(igtb_df['igtb_incomplete'] == 1)
-   igtb_opt_in = len(igtb_df['ID'].unique())
+   igtb_opt_in = len(igtb_df['participant_id'].unique())
    num_participants_total = igtb_df.shape[0]
    print("IGTB participant opt-in: (%d/%d) %3.2f%%"%(igtb_opt_in,num_participants_total, 100.0*float(igtb_opt_in)/num_participants_total))
    print("IGTB compliance: (%d/%d) %3.2f%%"%(igtb_num_complete, igtb_num_total, 100.0*float(igtb_num_complete)/igtb_num_total))
@@ -81,13 +83,15 @@ def ComputeSurveyCompliance(root_data_path, tikz_out_folder=None):
    for survey_type in ['job', 'health', 'personality']:
       mgt_compliance[survey_type] = {}
 
-   mgt_files = glob.glob(os.path.join(root_data_path,'surveys','raw','MGT','*.csv.gz'))
-   for f in mgt_files:
-      mgt_df = pd.read_csv(f)
-      mgt_df = mgt_df.iloc[1:,:] # cut out the question description row
+   mgt_file = os.path.join(root_data_path,'surveys','raw','EMAs','job_personality_health-context_stress_anxiety_pand_bfid_sleep_ex_tob_alc_work_itpd_irbd_dalal.csv.gz')
+   mgt_df = pd.read_csv(mgt_file)
+   mgt_surveys = mgt_df.groupby('survey_type')
+   mgt_groups= [x for x in mgt_surveys]
+   for mgt_group in mgt_groups:
+      survey_type = mgt_group[0]
+      mgt_df = mgt_group[1]
 
       # Figure out the survey type
-      survey_type = mgt_df['surveytype'][1]
       if survey_type == 'job':
          survey_cols = job_survey_cols
       elif survey_type == 'health':
@@ -107,7 +111,7 @@ def ComputeSurveyCompliance(root_data_path, tikz_out_folder=None):
       #print("--------------------")
 
       for row_idx in range(mgt_df.shape[0]):
-         participant_id = mgt_df.loc[mgt_df.index[row_idx], 'Name']
+         participant_id = mgt_df.loc[mgt_df.index[row_idx], 'participant_id']
          if not participant_id in mgt_compliance[survey_type]:
             mgt_compliance[survey_type][participant_id] = {'num_valid': 0, 'num_possible': 0}
          mgt_compliance[survey_type][participant_id]['num_valid'] += num_valid_responses[row_idx]
@@ -126,13 +130,12 @@ def ComputeSurveyCompliance(root_data_path, tikz_out_folder=None):
 
       # Generate histogram of the compliance per participant 
       hist_valid = []
-      max_possible = 0
       for participant_id in mgt_compliance[survey_type].keys():
-         hist_valid.append(mgt_compliance[survey_type][participant_id]['num_valid'])
-         max_possible = max(max_possible, mgt_compliance[survey_type][participant_id]['num_possible'])
-      hist_valid = np.array(hist_valid).astype(float)/max_possible
+         num_valid = mgt_compliance[survey_type][participant_id]['num_valid']
+         num_possible = mgt_compliance[survey_type][participant_id]['num_possible']
+         hist_valid.append(float(num_valid)/num_possible)
       
-      ax[0][i].hist(hist_valid)
+      ax[0][i].hist(hist_valid, bins=bins)
       ax[0][i].title.set_text('MGT %s Survey Compliance Histogram Per Participant'%(survey_type))
       ax[0][i].set_xlabel('Ratio of Completed MGT Questions')
       ax[0][i].set_ylabel('Number of Participants')
@@ -144,36 +147,35 @@ def ComputeSurveyCompliance(root_data_path, tikz_out_folder=None):
    ##################
    # S-MGT compliance
    ##################
-   smgt_file = os.path.join(root_data_path,'surveys','raw','S-MGT','S-MGT.csv.gz')
-   smgt_df = pd.read_csv(smgt_file)
+   psycap_file = os.path.join(root_data_path, 'surveys', 'raw', 'EMAs', 'psychological_capital-Psycap_Location_Activity_Engage_IS_CS_HS.csv.gz')
+   psyflex_file = os.path.join(root_data_path, 'surveys', 'raw', 'EMAs', 'psychological_flexibility-Activity_Experience_PF.csv.gz')
+   psycap_df = pd.read_csv(psycap_file)
+   psyflex_df = pd.read_csv(psyflex_file)
    smgt_compliance = {}
-   for survey_type in ['psych_flex', 'engage_psycap']:
+   for survey in [('psych_flex', psyflex_df), ('engage_psycap', psycap_df)]:
+      survey_type = survey[0]
+      smgt_df = survey[1]
       smgt_compliance[survey_type] = {}
-   for row_idx in range(smgt_df.shape[0]):
-      row = smgt_df.iloc[row_idx,:]
-      survey_type = row['survey_type']
-      if isinstance(row['results_updated'], float):
-         num_valid = 0
-      else:
-         results = row['results_updated']
-         results = results.replace("'",'"')
-         results = results.replace('son"s', "son's")
-         responses = json.loads(results)
-         num_valid= len(responses.keys())
-      
       if survey_type == 'psych_flex':
-         num_possible = 15
-      elif survey_type == 'engage_psycap':
-         num_possible = 29
-      else:
-         print("ERROR: unknown S-MGT survey type. FIX ME!")
-         pdb.set_trace()
+         single_response_cols = ['Activity'] + (['PF%d'%(i) for i in range(1,14)])
+         multi_response_cols = ['Experience%d'%(i) for i in range(1,15)]
+         num_single_responses = len(single_response_cols) - pd.isnull(smgt_df[single_response_cols]).sum(axis=1)
+         num_multi_responses = len(multi_response_cols) - pd.isnull(smgt_df[multi_response_cols]).sum(axis=1)
+         smgt_df['num_valid'] = num_single_responses + num_multi_responses.clip(upper=1)
+         smgt_df['num_possible'] = len(single_response_cols)+ 1
+      if survey_type == 'engage_psycap':
+         single_response_cols = ['Location', 'Activity'] + ['Engage%d'%(i) for i in range(1,4)] + ['Psycap%d'%(i) for i in range(1,13)] + ['IS1', 'IS2', 'IS3', 'CS1', 'CS2', 'CS3', 'CS4', 'CS5', 'HS1', 'HS2', 'HS3', 'HS4']
+         num_single_responses = len(single_response_cols) - pd.isnull(smgt_df[single_response_cols]).sum(axis=1)
+         smgt_df['num_valid'] = num_single_responses
+         smgt_df['num_possible'] = len(single_response_cols)
 
-      participant_id = row['participant_id']
-      if not participant_id in smgt_compliance[survey_type].keys():
-         smgt_compliance[survey_type][participant_id] = {'num_valid': 0, 'num_possible': 0}
-      smgt_compliance[survey_type][participant_id]['num_valid'] += num_valid
-      smgt_compliance[survey_type][participant_id]['num_possible'] += num_possible
+      for row_idx in range(smgt_df.shape[0]):
+         row = smgt_df.iloc[row_idx,:]
+         participant_id = row['participant_id']
+         if not participant_id in smgt_compliance[survey_type].keys():
+            smgt_compliance[survey_type][participant_id] = {'num_valid': 0, 'num_possible': 0}
+         smgt_compliance[survey_type][participant_id]['num_valid'] += row['num_valid']
+         smgt_compliance[survey_type][participant_id]['num_possible'] += row['num_possible']
 
    for (i, survey_type) in enumerate(['psych_flex', 'engage_psycap']):
       num_unique_ids = len(smgt_compliance[survey_type].keys())
@@ -188,13 +190,12 @@ def ComputeSurveyCompliance(root_data_path, tikz_out_folder=None):
 
       # Generate histogram of the compliance per participant 
       hist_valid = []
-      max_possible = 0
       for participant_id in smgt_compliance[survey_type].keys():
-         hist_valid.append(smgt_compliance[survey_type][participant_id]['num_valid'])
-         max_possible = max(max_possible, smgt_compliance[survey_type][participant_id]['num_possible'])
-      hist_valid = np.array(hist_valid).astype(float)/max_possible
+         num_valid = smgt_compliance[survey_type][participant_id]['num_valid']
+         num_possible = smgt_compliance[survey_type][participant_id]['num_possible']
+         hist_valid.append(float(num_valid)/num_possible)
 
-      ax[1][i].hist(hist_valid)
+      ax[1][i].hist(hist_valid, bins=bins)
       ax[1][i].title.set_text('S-MGT %s Survey Compliance Histogram Per Participant'%(survey_type))
       ax[1][i].set_xlabel('Ratio of Completed S-MGT Questions')
       ax[1][i].set_ylabel('Number of Participants')
@@ -213,7 +214,6 @@ def ComputeSurveyCompliance(root_data_path, tikz_out_folder=None):
 
    # Second, assumble data for histogram
    hist_valid = []
-   max_possible = 0
    for participant_id in participant_ids:
       num_valid_responses = 0
       num_possible_responses = 0
@@ -226,13 +226,9 @@ def ComputeSurveyCompliance(root_data_path, tikz_out_folder=None):
             num_valid_responses += smgt_compliance[smgt_survey_type][participant_id]['num_valid']
             num_possible_responses += smgt_compliance[smgt_survey_type][participant_id]['num_possible']
 
-      hist_valid.append(num_valid_responses)
-      max_possible = max(max_possible, num_possible_responses)
+      hist_valid.append(float(num_valid_responses)/num_possible_responses)
 
-   # Third, plot the histogram
-   hist_valid = np.array(hist_valid).astype(float)/max_possible
-
-   ax[1][-1].hist(hist_valid)
+   ax[1][-1].hist(hist_valid, bins=bins)
    ax[1][-1].title.set_text('Combined MGT and S-MGT Survey Compliance Histogram Per Participant')
    ax[1][-1].set_xlabel('Ratio of Completed Questions')
    ax[1][-1].set_ylabel('Number of Participants')
