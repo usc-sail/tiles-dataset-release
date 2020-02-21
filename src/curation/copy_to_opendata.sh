@@ -276,6 +276,15 @@ zcat MGT.csv.gz | \
     sort -n | \
     uniq -c
 
+# Participant Job compliance Histogram:
+zcat MGT.csv.gz | \
+    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" "NR > 1 {print $(zcat MGT.csv.gz | head -n1 | tr , '\n' | nl | grep -v Time | awk '{print $1}' | tr '\n' ',' | sed -e 's/,$//' -e 's/,/,$/g' -e 's/^/$/')}" | \
+    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '{if (length($13) > 0 || length($14) > 0) $14=1; else $14=""; if (length($11) > 0 || length($12) > 0) $13=1; else $13=""; if (length($9) > 0 || length($10) > 0) $12=1; else $12=""; $11=$8; $10=$2; for (i=10; i <= NF; ++i) $(i-8)=$(i); NF=NF-8; print}' | \
+    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '$2 ~ /job/ {tmp=0; for (i=3; i<=18; ++i) if (length($(i)) > 0) ++tmp; N=17; if (length($44) > 0) {++tmp; if ($44 != 2) {N=43; for (i=45; i<=70; ++i) if (length($(i)) > 0) ++tmp;}} print $1, tmp,  N}' | \
+    sort | \
+    awk -v OFS="," -v FS="," 'BEGIN {prev = ""; X=0; N=0;} {if (prev != $1) { if (length(prev) > 0) {printf("%.1f\n", X / N * 100); X=0; N=0} prev=$1} X += $2; N += $3} END {printf("%.1f\n", X / N * 100)}' | \
+    sort -n | uniq -c
+
 # health
 zcat MGT.csv.gz | \
     gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" "NR > 1 {print $(zcat MGT.csv.gz | head -n1 | tr , '\n' | nl | grep -v Time | awk '{print $1}' | tr '\n' ',' | sed -e 's/,$//' -e 's/,/,$/g' -e 's/^/$/')}" | \
@@ -284,11 +293,31 @@ zcat MGT.csv.gz | \
     sort -n | \
     uniq -c
 
+# Participant health compliance Histogram:
+zcat MGT.csv.gz | \
+    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" "NR > 1 {print $(zcat MGT.csv.gz | head -n1 | tr , '\n' | nl | grep -v Time | awk '{print $1}' | tr '\n' ',' | sed -e 's/,$//' -e 's/,/,$/g' -e 's/^/$/')}" | \
+    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '{if (length($13) > 0 || length($14) > 0) $14=1; else $14=""; if (length($11) > 0 || length($12) > 0) $13=1; else $13=""; if (length($9) > 0 || length($10) > 0) $12=1; else $12=""; $11=$8; $10=$2; for (i=10; i <= NF; ++i) $(i-8)=$(i); NF=NF-8; print}' | \
+    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '$2 ~ /health/ {tmp=0; for (i=3; i<=18; ++i) if (length($(i)) > 0) ++tmp; for (i=29; i<=43; ++i) if (length($(i)) > 0) ++tmp; N=31; if ($32 == 2) N -= 7; if ($40 == 2) N -= 3; print $1, tmp,  N}' | \
+    sort | \
+    awk -v OFS="," -v FS="," 'BEGIN {prev = ""; X=0; N=0;} {if (prev != $1) { if (length(prev) > 0) {printf("%.1f\n", X / N * 100); X=0; N=0} prev=$1} X += $2; N += $3} END {printf("%.1f\n", X / N * 100)}' | \
+    sort -n | \
+    uniq -c
+
 # Personality
 zcat MGT.csv.gz | \
     gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" "NR > 1 {print $(zcat MGT.csv.gz | head -n1 | tr , '\n' | nl | grep -v Time | awk '{print $1}' | tr '\n' ',' | sed -e 's/,$//' -e 's/,/,$/g' -e 's/^/$/')}" | \
     gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '{if (length($13) > 0 || length($14) > 0) $14=1; else $14=""; if (length($11) > 0 || length($12) > 0) $13=1; else $13=""; if (length($9) > 0 || length($10) > 0) $12=1; else $12=""; $11=$8; $10=$2; for (i=10; i <= NF; ++i) $(i-9)=$(i); NF=NF-9; print}' | \
     gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '$1 ~ /perso/ {tmp=0; for (i=2; i<=27; ++i) if (length($(i)) > 0) ++tmp; printf("%.1f\n", tmp / 26 * 100)}' | \
+    sort -n | \
+    uniq -c
+
+# Participant Personality compliance Histogram:
+zcat MGT.csv.gz | \
+    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" "NR > 1 {print $(zcat MGT.csv.gz | head -n1 | tr , '\n' | nl | grep -v Time | awk '{print $1}' | tr '\n' ',' | sed -e 's/,$//' -e 's/,/,$/g' -e 's/^/$/')}" | \
+    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '{if (length($13) > 0 || length($14) > 0) $14=1; else $14=""; if (length($11) > 0 || length($12) > 0) $13=1; else $13=""; if (length($9) > 0 || length($10) > 0) $12=1; else $12=""; $11=$8; $10=$2; for (i=10; i <= NF; ++i) $(i-8)=$(i); NF=NF-8; print}' | \
+    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '$2 ~ /perso/ {tmp=0; for (i=3; i<=28; ++i) if (length($(i)) > 0) ++tmp; print $1, tmp,  26}' | \
+    sort | \
+    awk -v OFS="," -v FS="," 'BEGIN {prev = ""; X=0; N=0;} {if (prev != $1) { if (length(prev) > 0) {printf("%.1f\n", X / N * 100); X=0; N=0} prev=$1} X += $2; N += $3} END {printf("%.1f\n", X / N * 100)}' | \
     sort -n | \
     uniq -c
 
@@ -566,6 +595,13 @@ zcat psychological_capital.csv.gz | \
     gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" 'NR > 1 {tmp = 0; for (i = 7; i <= NF; ++i) if (length($(i)) > 0) tmp++; printf("%.1f\n", tmp / (NF - 7 + 1) * 100)}' | \
     sort -n | uniq -c
 
+# Participant compliance Histogram:
+zcat psychological_capital.csv.gz | \
+    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" 'NR > 1 {tmp = 0; for (i = 7; i <= NF; ++i) if (length($(i)) > 0) tmp++; printf("%s,%d,%d\n", $1, tmp, NF - 7 + 1)}' | \
+    sort | \
+    awk -v OFS="," -v FS="," 'BEGIN {prev = ""; X=0; N=0;} {if (prev != $1) { if (length(prev) > 0) {printf("%.1f\n", X / N * 100); X=0; N=0} prev=$1} X += $2; N += $3} END {printf("%.1f\n", X / N * 100)}' | \
+    sort -n | uniq -c
+
 # Psychological Flexibility
 
 # Name the columns, and remove the unused ones
@@ -615,6 +651,46 @@ zcat psychological_flexibility.csv.gz | \
     gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" 'NR > 1 {tmp = 0; for (i = 1; i <= 14; ++i) if (length($(6+1+i)) > 0) tmp = 1; if (length($(6+1)) > 0) ++tmp; for (i = 1; i <= 13; ++i) if (length($(6+1+14+i)) > 0) tmp++; printf("%.1f\n", tmp / 15 * 100)}' | \
     sort -n | uniq -c
 
+# Participant compliance Histogram:
+zcat psychological_flexibility.csv.gz | \
+    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" 'NR > 1 {tmp = 0; for (i = 1; i <= 14; ++i) if (length($(6+1+i)) > 0) tmp = 1; if (length($(6+1)) > 0) ++tmp; for (i = 1; i <= 13; ++i) if (length($(6+1+14+i)) > 0) tmp++; print $1, tmp, 15}' | \
+    sort | \
+    awk -v OFS="," -v FS="," 'BEGIN {prev = ""; X=0; N=0;} {if (prev != $1) { if (length(prev) > 0) {printf("%.1f\n", X / N * 100); X=0; N=0} prev=$1} X += $2; N += $3} END {printf("%.1f\n", X / N * 100)}' | \
+    sort -n | uniq -c
+
+    
+    
+## Histogram of the overall compliance
+
+(
+    # Job
+    zcat MGT.csv.gz | \
+        gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" "NR > 1 {print $(zcat MGT.csv.gz | head -n1 | tr , '\n' | nl | grep -v Time | awk '{print $1}' | tr '\n' ',' | sed -e 's/,$//' -e 's/,/,$/g' -e 's/^/$/')}" | \
+        gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '{if (length($13) > 0 || length($14) > 0) $14=1; else $14=""; if (length($11) > 0 || length($12) > 0) $13=1; else $13=""; if (length($9) > 0 || length($10) > 0) $12=1; else $12=""; $11=$8; $10=$2; for (i=10; i <= NF; ++i) $(i-9)=$(i); NF=NF-9; print}' | \
+        gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '$1 ~ /job/ {tmp=0; for (i=2; i<=17; ++i) if (length($(i)) > 0) ++tmp; N=17; if (length($43) > 0) {++tmp; if ($43 == 1) {N=43; for (i=44; i<=69; ++i) if (length($(i)) > 0) ++tmp;}} printf("%.1f\n", tmp / N * 100)}'
+
+    # health
+    zcat MGT.csv.gz | \
+        gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" "NR > 1 {print $(zcat MGT.csv.gz | head -n1 | tr , '\n' | nl | grep -v Time | awk '{print $1}' | tr '\n' ',' | sed -e 's/,$//' -e 's/,/,$/g' -e 's/^/$/')}" | \
+        gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '{if (length($13) > 0 || length($14) > 0) $14=1; else $14=""; if (length($11) > 0 || length($12) > 0) $13=1; else $13=""; if (length($9) > 0 || length($10) > 0) $12=1; else $12=""; $11=$8; $10=$2; for (i=10; i <= NF; ++i) $(i-9)=$(i); NF=NF-9; print}' | \
+        gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '$1 ~ /health/ {tmp=0; for (i=2; i<=17; ++i) if (length($(i)) > 0) ++tmp; for (i=28; i<=42; ++i) if (length($(i)) > 0) ++tmp; N=31; if ($31 == 2) N -= 7; if ($39 == 2) N -= 3; printf("%.1f\n", tmp / N * 100)}'
+
+    # Personality
+    zcat MGT.csv.gz | \
+        gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" "NR > 1 {print $(zcat MGT.csv.gz | head -n1 | tr , '\n' | nl | grep -v Time | awk '{print $1}' | tr '\n' ',' | sed -e 's/,$//' -e 's/,/,$/g' -e 's/^/$/')}" | \
+        gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '{if (length($13) > 0 || length($14) > 0) $14=1; else $14=""; if (length($11) > 0 || length($12) > 0) $13=1; else $13=""; if (length($9) > 0 || length($10) > 0) $12=1; else $12=""; $11=$8; $10=$2; for (i=10; i <= NF; ++i) $(i-9)=$(i); NF=NF-9; print}' | \
+        gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '$1 ~ /perso/ {tmp=0; for (i=2; i<=27; ++i) if (length($(i)) > 0) ++tmp; printf("%.1f\n", tmp / 26 * 100)}'
+        
+    # Psychological Capital
+    zcat psychological_capital.csv.gz | \
+        gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" 'NR > 1 {tmp = 0; for (i = 7; i <= NF; ++i) if (length($(i)) > 0) tmp++; printf("%.1f\n", tmp / (NF - 7 + 1) * 100)}'
+
+     # Psychological Flexibility   
+    zcat psychological_flexibility.csv.gz | \
+        gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" 'NR > 1 {tmp = 0; for (i = 1; i <= 14; ++i) if (length($(6+1+i)) > 0) tmp = 1; if (length($(6+1)) > 0) ++tmp; for (i = 1; i <= 13; ++i) if (length($(6+1+14+i)) > 0) tmp++; printf("%.1f\n", tmp / 15 * 100)}'
+) | \
+    sort -n | \
+    uniq -c
 
 
 
@@ -825,86 +901,204 @@ done
 
 ## Surveys: Scored / Supplemental MGT
 
-aws s3 cp --recursive s3://${PROCESSED_BUCKET}/3_preprocessed_data/ground_truth/S-MGT/ .
 
-cat > psycap_fix_and_sort.awk <<EOF
+# Psychological Capital
+
+cat > pc_scoring.awk <<EOF
 BEGIN {
-    FS=",";
     OFS=",";
+    FS=",";
+    FPAT="([^,]*)|(\"[^\"]+\")";
 }
 NR == 1 {
-    \$1=\$2;
-    \$2="survey_type";
-    \$3="sent_ts";
-    \$4="completed_ts";
-    \$5="psycap";
-    \$6="engage";
-    \$7="is";
-    \$8="cs";
-    \$9="hs";
-    print
+    print "participant_id", "sent_ts", "completed_ts", "engage", "psycap", "is", "cs", "hs";
 }
 NR > 1 {
-    datecmd = "date --date=\""\$4"\" +%Y-%m-%dT%H:%M:%S";
-    datecmd | getline timestamp;
-    close(datecmd);
-    \$4=timestamp;
-    \$3=\$1;
-    \$1=\$2;
-    \$2="engage_psycap";
-    print | "sort --field-separator=',' -k3,3 -k1,1"
+    engage = "";
+    N = int(length(\$9) > 0) + int(length(\$10) > 0) + int(length(\$11) > 0);
+    if (N > 0) {
+        engage = sprintf("%.2f", (\$9 + \$10 + \$11) / N);
+    }
+    
+    psycap = "";
+    N = 0;
+    for (i = 12; i <= 23; ++i) {
+        if (length(\$(i)) > 0) {
+            N++;
+            psycap += \$(i);
+        }
+    }
+    if (N > 0) {
+        psycap = sprintf("%.2f", psycap / N);
+    }
+    
+    is = "";
+    N = int(length(\$24) > 0) + int(length(\$25) > 0) + int(length(\$26) > 0);
+    if (N > 0) {
+        is = sprintf("%.2f", (\$24 + \$25 + \$26) / N);
+    }
+    
+    cs = "";
+    N = int(length(\$27) > 0) + int(length(\$28) > 0) + int(length(\$29) > 0) + int(length(\$30) > 0) + int(length(\$31) > 0);
+    if (N > 0) {
+        cs = sprintf("%.2f", (\$27 + \$28 + \$29 + \$30 + \$31) / N);
+    }
+    
+    hs = "";
+    N = int(length(\$32) > 0) + int(length(\$33) > 0) + int(length(\$34) > 0) + int(length(\$35) > 0);
+    if (N > 0) {
+        hs = sprintf("%.2f", (\$32 + \$33 + \$34 + \$35) / N);
+    }
+    
+    print \$1, \$2, \$5, engage, psycap, is, cs, hs
 }
 EOF
 
-zcat psychological_capital_scored.csv.gz | \
-    grep -v -E "^2018-0(2-[0-9][0-9]|3-0[1-4])" | \
-    sed -e 's/ /T/' -e 's/\.000//' -e 's/\r$//' | \
-    cut -d',' -f1-3,5- | \
-    awk -f psycap_fix_and_sort.awk | \
-    gzip -9 > psychological_capital.csv.gz
+aws s3 cp s3://${TARGET_BUCKET}/surveys/raw/EMAs/psychological_capital-Psycap_Location_Activity_Engage_IS_CS_HS.csv.gz .
 
-aws s3 cp psychological_capital.csv.gz s3://${TARGET_BUCKET}/surveys/scored/EMAs/psycap_engage_is_cs_hs.csv.gz
+zcat psychological_capital-Psycap_Location_Activity_Engage_IS_CS_HS.csv.gz | gawk -f pc_scoring.awk | gzip -9 > psychological_capital.csv.gz
+aws s3 cp psychological_capital.csv.gz s3://${TARGET_BUCKET}/surveys/scored/EMAs/engage_psycap_is_cs_hs.csv.gz
 
 
-cat > psyflex_fix_and_sort.awk <<EOF
+# Psychological flexibility
+
+cat > pf_scoring.awk <<EOF
 BEGIN {
-    FS=",";
     OFS=",";
+    FS=",";
+    FPAT="([^,]*)|(\"[^\"]+\")";
 }
 NR == 1 {
-    \$1=\$2;
-    \$2=\$3;
-    \$3="sent_ts";
-    \$4="completed_ts";
-    \$5="pf";
-    \$6="experience_Negative";
-    \$7="experience_Positive";
-    \$8="experience_Neutral";
-    \$9="experience_Negative1";
-    print
+    print "participant_id", "sent_ts", "completed_ts", "experience_Negative", "experience_Positive", "experience_Neutral", "experience_Negative1", "pf";
 }
 NR > 1 {
-    datecmd = "date --date=\""\$4"\" +%Y-%m-%dT%H:%M:%S";
-    datecmd | getline timestamp;
-    close(datecmd);
-    \$4=timestamp;
-    tmp=\$1;
-    \$1=\$2;
-    \$2=\$3;
-    \$3=tmp;
-    print | "sort --field-separator=',' -k3,3 -k1,1"
+    # PF
+    pf = "";
+    N = 0;
+    for (i=22; i<=NF; ++i) {
+        if (length(\$(i)) > 0) {
+            N++;
+            pf += \$(i);
+        }
+    }
+    if (N > 0)
+        pf = sprintf("%.2f", pf / N);
+
+    # Experience
+    answered_act = 0;
+    if (length(\$7) > 0)
+        answered_act = 1;
+    answered_exp = 0;
+    for (i = 8; i <=21; ++i)
+        if (length(\$(i)) > 0)
+            answered_exp = 1;
+    if (answered_act == 1 && N > 0) {
+        expneg = \$8 + \$10 + \$12 + \$14 + \$16;
+        exppos  = \$9 + \$11 + \$13 + \$15;
+        expneut = \$17 + \$18 + \$19 + \$20 + \$21;
+        expneg1 = \$8 + \$9 + \$10 + \$12 + \$14 + \$16 + \$17 + \$18 + \$19 + \$20;
+    } else {
+        expneg = "";
+        exppos = "";
+        expneut = "";
+        expneg1 = "";
+    }
+    print \$1, \$2, \$5, expneg, exppos, expneut, expneg1, pf
 }
 EOF
 
-zcat psychological_flexibility_scored.csv.gz | \
-    grep -v -E "^2018-0(2-[0-9][0-9]|3-0[1-4])" | \
-    sed -e 's/\([0-9]\) /\1T/' -e 's/\.000//' -e 's/\r$//' | \
-    cut -d',' -f2,4,5,7- | \
-    awk -f psyflex_fix_and_sort.awk | \
-    gzip -9 > psychological_flexibility.csv.gz
+aws s3 cp s3://${TARGET_BUCKET}/surveys/raw/EMAs/psychological_flexibility-Activity_Experience_PF.csv.gz .
+
+zcat psychological_flexibility-Activity_Experience_PF.csv.gz | gawk -f pf_scoring.awk | gzip -9 > psychological_flexibility.csv.gz
+aws s3 cp psychological_flexibility.csv.gz s3://${TARGET_BUCKET}/surveys/scored/EMAs/experience_pf.csv.gz
 
 
-aws s3 cp - s3://${TARGET_BUCKET}/surveys/scored/EMAs/psychological_flexibility.csv.gz
+
+
+
+# aws s3 cp --recursive s3://${PROCESSED_BUCKET}/3_preprocessed_data/ground_truth/S-MGT/ .
+
+
+
+
+# cat > psycap_fix_and_sort.awk <<EOF
+# BEGIN {
+#     FS=",";
+#     OFS=",";
+# }
+# NR == 1 {
+#     \$1=\$2;
+#     \$2="survey_type";
+#     \$3="sent_ts";
+#     \$4="completed_ts";
+#     \$5="psycap";
+#     \$6="engage";
+#     \$7="is";
+#     \$8="cs";
+#     \$9="hs";
+#     print
+# }
+# NR > 1 {
+#     datecmd = "date --date=\""\$4"\" +%Y-%m-%dT%H:%M:%S";
+#     datecmd | getline timestamp;
+#     close(datecmd);
+#     \$4=timestamp;
+#     \$3=\$1;
+#     \$1=\$2;
+#     \$2="engage_psycap";
+#     print | "sort --field-separator=',' -k3,3 -k1,1"
+# }
+# EOF
+# 
+# zcat psychological_capital_scored.csv.gz | \
+#     grep -v -E "^2018-0(2-[0-9][0-9]|3-0[1-4])" | \
+#     sed -e 's/ /T/' -e 's/\.000//' -e 's/\r$//' | \
+#     cut -d',' -f1-3,5- | \
+#     awk -f psycap_fix_and_sort.awk | \
+#     gzip -9 > psychological_capital.csv.gz
+# 
+# aws s3 cp psychological_capital.csv.gz s3://${TARGET_BUCKET}/surveys/scored/EMAs/psycap_engage_is_cs_hs.csv.gz
+# 
+# 
+# cat > psyflex_fix_and_sort.awk <<EOF
+# BEGIN {
+#     FS=",";
+#     OFS=",";
+# }
+# NR == 1 {
+#     \$1=\$2;
+#     \$2=\$3;
+#     \$3="sent_ts";
+#     \$4="completed_ts";
+#     \$5="pf";
+#     \$6="experience_Negative";
+#     \$7="experience_Positive";
+#     \$8="experience_Neutral";
+#     \$9="experience_Negative1";
+#     print
+# }
+# NR > 1 {
+#     datecmd = "date --date=\""\$4"\" +%Y-%m-%dT%H:%M:%S";
+#     datecmd | getline timestamp;
+#     close(datecmd);
+#     \$4=timestamp;
+#     tmp=\$1;
+#     \$1=\$2;
+#     \$2=\$3;
+#     \$3=tmp;
+#     print | "sort --field-separator=',' -k3,3 -k1,1"
+# }
+# EOF
+# 
+# zcat psychological_flexibility_scored.csv.gz | \
+#     grep -v -E "^2018-0(2-[0-9][0-9]|3-0[1-4])" | \
+#     sed -e 's/\([0-9]\) /\1T/' -e 's/\.000//' -e 's/\r$//' | \
+#     cut -d',' -f2,4,5,7- | \
+#     awk -f psyflex_fix_and_sort.awk | \
+#     gzip -9 > psychological_flexibility.csv.gz
+# 
+# 
+# aws s3 cp psychological_flexibility.csv.gz s3://${TARGET_BUCKET}/surveys/scored/EMAs/
 
 
 ## Surveys: Scored / IGTB
