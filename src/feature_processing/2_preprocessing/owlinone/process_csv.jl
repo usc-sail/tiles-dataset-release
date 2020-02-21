@@ -7,63 +7,57 @@ using DataFrames
 using TableReader
 using StringEncodings
 
-function parse_commandline()
-    args = Dict{String,Any}()
-    args["sensor"] = "jelly"
-    args["data_folder"] = expanduser("~/Documents/Research/TILES/Data/tiles-phase1-wav123/owlinone/jelly/")
-    args["write_folder"] = expanduser("~/Documents/Research/TILES/Data/tiles-phase1-wav123-processed/2_raw_csv_data/owlinone/test_jelly/")
-    args["deviceids"] = "deviceIDs.csv"
-    args["directories"] = "directories_by_date_wav123.csv"
-    args["files"] = "*.csv.gz"
-    args["earliest_date"] = Date(2018,03,04)
-
-    return args
-end
-
 # function parse_commandline()
-#     settings = ArgParseSettings()
+#     args = Dict{String,Any}()
+#     args["sensor"] = "jelly"
+#     args["data_folder"] = expanduser("~/Documents/Research/TILES/Data/tiles-phase1-wav123/owlinone/jelly/")
+#     args["write_folder"] = expanduser("~/Documents/Research/TILES/Data/tiles-phase1-wav123-processed/2_raw_csv_data/owlinone/test_jelly/")
+#     args["deviceids"] = "deviceIDs.csv"
+#     args["directories"] = "directories_by_date_wav123.csv"
+#     args["files"] = "*.csv.gz"
+#     args["earliest_date"] = Date(2018,03,04)
 
-#     @add_arg_table settings begin
-#         "data_folder"
-#             help = "Path to the data folder containing JSONL files."
-#             arg_type = String
-#             required = true
-#             range_tester = ispath
-#         "write_folder"
-#             help = "Path to the folder into which the files are written."
-#             arg_type = String
-#             required = true
-#             range_tester = ispath
-#         "--sensor", "-s"
-#             help = "Sensor information to parse from {owl, jelly}."
-#             arg_type = String
-#             range_tester = (x -> x in ["jelly", "owl", "minew"])
-#             required = true
-#          "--deviceids", "-i"
-#             help = "DeviceIDs for each Owl-in-One."
-#             required = false
-#             default = "deviceIDs.csv"
-#             arg_type = String
-#          "--directories", "-d"
-#             help = "Directory -- receiverId mapping for each wave of data"
-#             required = true
-#             default = "directories_by_date_wav123.csv"
-#             arg_type = String
-#          "--files", "-f"
-#             help = "JSONL file to process in data_folder. It can be a regex such as *.jsonl (default)"
-#             default = "*.jsonl.gz"
-#             arg_type = String
-#             required = false
-#          "--earliest_date", "-e"
-#             help = "Earliest date to process from input files"
-#             required = false
-#             default = Date(2018,03,05)
-#             arg_type = Date
-#             range_tester = (x -> Date(2018,03,05) ≤ x ≤ Date(2018,07,14))
-#     end
-
-#     return parse_args(settings)
+#     return args
 # end
+
+function parse_commandline()
+    settings = ArgParseSettings()
+
+    @add_arg_table settings begin
+        "--data_folder", "-r"
+            help = "Path to the data folder containing JSONL files."
+            arg_type = String
+            required = true
+            range_tester = ispath
+        "--write_folder", "-w"
+            help = "Path to the folder into which the files are written."
+            arg_type = String
+            required = true
+            range_tester = ispath
+        "--sensor", "-s"
+            help = "Sensor information to parse from {owl, jelly}."
+            arg_type = String
+            range_tester = (x -> x in ["jelly", "owl", "minew"])
+            required = true
+         "--deviceids", "-i"
+            help = "DeviceIDs for each Owl-in-One."
+            required = false
+            default = "deviceIDs.csv"
+            arg_type = String
+         "--directories", "-d"
+            help = "Directory -- receiverId mapping for each wave of data"
+            required = false
+            default = "directories_by_date_wav123.csv"
+            arg_type = String
+         "--files", "-f"
+            help = "CSV file(s) to process in data_folder. It can be a regex such as *.csv.gz (default)"
+            default = "*.csv.gz"
+            arg_type = String
+            required = false
+    end
+
+    return parse_args(settings)
+end
 
 """
 function getdatetime(unixtime::Int64; tz::TimeZones.VariableTimeZone=tz)
@@ -88,6 +82,11 @@ function datefromfilename(file::String; dateformat::DateFormat=DateFormat("yyyym
     return Date(split(basename(file), '.')[1], dateformat)
 end
 
+"""
+function getjellyID(hexID::Union{String,Missings.Missing})
+
+    Decode the hex representation of the jelly ID into UTF-8.
+"""
 function getjellyID(hexID::Union{String,Missings.Missing})
     bytes = Array{UInt8,1}()
     participantId = ""
@@ -111,6 +110,11 @@ function getjellyID(hexID::Union{String,Missings.Missing})
     end
 end
 
+"""
+function fixjellyID!(df::DataFrame)
+
+    Helper function to decode Jelly IDs in a DataFrame.
+"""
 function fixjellyID!(df::DataFrame)
     df[!,:jellyId] = getjellyID.(df[!,:jellyId])
 end
