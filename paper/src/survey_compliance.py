@@ -36,7 +36,7 @@ def CountValidResponses(df, survey_type):
       row = df.iloc[row_idx,:]
       if survey_type == 'job':
          if str(row['work']) == str(float(2)): # Did not work that day, ignore work questions
-            row = row.drop(['itpd1', 'itpd2', 'irbd1', 'irbd2', 'irbd3', 'irbd4', 'irbd5', 'irbd6', 'irbd7', 'dalal1', 'dalal2', 'dalal3', 'dalal4', 'dalal5', 'dalal6', 'dalal7', 'dalal8', 'dalal9', 'dalal10', 'dalal11', 'dalal12', 'dalal13', 'dalal14', 'dalal15', 'dalal16'])
+            row = row.drop(['itpd1', 'itpd2', 'itpd3', 'irbd1', 'irbd2', 'irbd3', 'irbd4', 'irbd5', 'irbd6', 'irbd7', 'dalal1', 'dalal2', 'dalal3', 'dalal4', 'dalal5', 'dalal6', 'dalal7', 'dalal8', 'dalal9', 'dalal10', 'dalal11', 'dalal12', 'dalal13', 'dalal14', 'dalal15', 'dalal16'])
       elif survey_type == 'health':
          if str(row['tob1']) == str(float(2)): # Did not consume tobacco, ignore tobacco questions
             row = row.drop(['tob2_1', 'tob2_2', 'tob2_3', 'tob2_4', 'tob2_5', 'tob2_6', 'tob2_7'])
@@ -161,13 +161,18 @@ def ComputeSurveyCompliance(root_data_path, tikz_out_folder=None):
          multi_response_cols = ['Experience%d'%(i) for i in range(1,15)]
          num_single_responses = len(single_response_cols) - pd.isnull(smgt_df[single_response_cols]).sum(axis=1)
          num_multi_responses = len(multi_response_cols) - pd.isnull(smgt_df[multi_response_cols]).sum(axis=1)
+
          smgt_df['num_valid'] = num_single_responses + num_multi_responses.clip(upper=1)
          smgt_df['num_possible'] = len(single_response_cols)+ 1
+         smgt_df.loc[smgt_df['num_valid'] == 0,'num_possible'] = 0 # Remove non-starter responses
+
       if survey_type == 'engage_psycap':
          single_response_cols = ['Location', 'Activity'] + ['Engage%d'%(i) for i in range(1,4)] + ['Psycap%d'%(i) for i in range(1,13)] + ['IS1', 'IS2', 'IS3', 'CS1', 'CS2', 'CS3', 'CS4', 'CS5', 'HS1', 'HS2', 'HS3', 'HS4']
          num_single_responses = len(single_response_cols) - pd.isnull(smgt_df[single_response_cols]).sum(axis=1)
+
          smgt_df['num_valid'] = num_single_responses
          smgt_df['num_possible'] = len(single_response_cols)
+         smgt_df.loc[smgt_df['num_valid'] == 0,'num_possible'] = 0 # Remove non-starter responses
 
       for row_idx in range(smgt_df.shape[0]):
          row = smgt_df.iloc[row_idx,:]
