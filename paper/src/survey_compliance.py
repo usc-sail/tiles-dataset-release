@@ -35,12 +35,12 @@ def CountValidResponses(df, survey_type):
    for row_idx in range(df.shape[0]):
       row = df.iloc[row_idx,:]
       if survey_type == 'job':
-         if str(row['work']) == str(float(2)): # Did not work that day, ignore work questions
+         if str(row['work']) == str(float(2)) or str(row['work']) == str(np.nan): # Did not work that day or unknown work status => ignore work questions
             row = row.drop(['itpd1', 'itpd2', 'itpd3', 'irbd1', 'irbd2', 'irbd3', 'irbd4', 'irbd5', 'irbd6', 'irbd7', 'dalal1', 'dalal2', 'dalal3', 'dalal4', 'dalal5', 'dalal6', 'dalal7', 'dalal8', 'dalal9', 'dalal10', 'dalal11', 'dalal12', 'dalal13', 'dalal14', 'dalal15', 'dalal16'])
       elif survey_type == 'health':
-         if str(row['tob1']) == str(float(2)): # Did not consume tobacco, ignore tobacco questions
+         if str(row['tob1']) == str(float(2)) or str(row['tob1']) == str(np.nan): # Did not consume tobacco or unknown => ignore tobacco questions
             row = row.drop(['tob2_1', 'tob2_2', 'tob2_3', 'tob2_4', 'tob2_5', 'tob2_6', 'tob2_7'])
-         if str(row['alc1']) == str(float(2)): # Did not consume alcohol, ignore alcohol questions
+         if str(row['alc1']) == str(float(2)) or str(row['alc1']) == str(np.nan): # Did not consume alcohol or unknown => ignore alcohol questions
             row = row.drop(['alc2_1', 'alc2_2', 'alc2_3'])
       elif survey_type == 'personality':
          pass # No questions to cull
@@ -48,8 +48,6 @@ def CountValidResponses(df, survey_type):
       num_valid_responses[row_idx] = row.count()
       num_possible_responses[row_idx] = len(row)
             
-   #num_missing = df.isnull().sum().sum()
-   #num_valid = df.count().sum()
    return num_valid_responses, num_possible_responses
 
 def ComputeSurveyCompliance(root_data_path, tikz_out_folder=None):
