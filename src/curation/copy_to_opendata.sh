@@ -222,11 +222,103 @@ EOF
 
 aws s3 sync s3://${RAW_BUCKET}/ground_truth/MGT/ . --exclude '*July*'
 aws s3 cp s3://${PROCESSED_BUCKET}/id-mapping/mitreids.csv .
+aws s3 cp s3://${TARGET_BUCKET}/metadata/participant-info/participant-info.csv.gz .
 
 rm *201802* *20180301* *20180302* *20180303* *20180304*
 for f in USC*
 do
     mv $f $(echo $f | sed -e 's/USC_\(NIGHT\|DAY\|PILOT\)_\([0-9]*\)_\(job\|health\|personality\)_\(12[ap]m\|6[ap]m\)/\2_\4_\1_\3/' -e 's/6pm/1800/' -e 's/12am/0000/' -e 's/[ap]m/00/' -e 's/600/0600/');
+done
+
+zcat participant-info.csv.gz | \
+    awk -F, -v OFS=, '$7 ~ /Day/ {print $1, 1, $8} $7 ~ /Night/ {print $1, 0, $8}' > tmp.csv
+
+grep -E "$(grep '1,1' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' > day_0305-0408.csv
+grep -E "$(grep '0,1' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' > night_0305-0408.csv
+
+grep -E "$(grep -E '1,[12]' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' > day_0409-0503.csv
+grep -E "$(grep -E '0,[12]' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' > night_0409-0503.csv
+
+grep -E "$(grep -E '1,[123]' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' > day_0504-0514.csv
+grep -E "$(grep -E '0,[123]' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' > night_0504-0514.csv
+
+grep -E "$(grep -E '1,[23]' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' > day_0515-0618.csv
+grep -E "$(grep -E '0,[23]' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' > night_0515-0618.csv
+
+grep -E "$(grep '1,3' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' > day_0619-0714.csv
+grep -E "$(grep '0,3' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' > night_0619-0714.csv
+
+for f in 2018*
+do
+    # First, find the set of participants on that day
+    shift=day # PILOT participants are DAY participant in wave 1
+    if echo $f | grep -q NIGHT
+    then
+        shift=night
+    fi
+    set=""
+    filemonth=${f:4:2}
+    fileday=${f:6:2}
+    if [[ $filemonth -ge 4 ]] && [[ $fileday -ge 9 ]]
+    then
+        if [[ $filemonth -eq 5 ]] && [[ $fileday -gt 4 ]]
+        then
+            if [[ $filemonth -eq 5 ]] && [[ $fileday -gt 15 ]]
+            then
+                if [[ $filemonth -eq 6 ]] && [[ $fileday -gt 19 ]]
+                then
+                    # fifth interval
+                    set=0619-0714
+                else
+                    # fourth interval
+                    set=0515-0618
+                fi
+            else
+                # third interval
+                set=0504-0514
+            fi
+        else
+            # second interval
+            set=0409-0503
+        fi
+    else
+        # first interval
+        set=0305-0408
+    fi
+    
+    # Type and time
+    surveytype=$(echo $f | sed -e 's/^.*_.*_.*_\(.*\).csv$/\1/')
+    surveytime=$(($(echo $f | sed -e 's/^.*_\(.*\)_.*_.*.csv$/\1/') / 100))
+    if [[ $surveytime -ge 12 ]]
+    then
+        if [[ $surveytime -eq 12 ]]
+        then
+            surveytime="12pm";
+        else
+            surveytime="6pm";
+        fi
+    else
+        if [[ $surveytime -eq 0 ]]
+        then
+            surveytime="12am";
+        else
+            surveytime="6am";
+        fi
+    fi
+    
+    # Then, add back the missing ones.
+    grep -vE "$(tail -n+3 $f | awk -F, '{print $6}' | tr '\n' '|' | sed -e 's/|$//')" "${shift}_${set}.csv" | \
+        awk -v OFS=, '{$5=0; $6=$1; $7="'"${fileday}/${filemonth}"'/2018"; $9="'"$surveytype"'"; $11="'"$surveytime"'"; print}' >> $f
 done
 
 (
@@ -268,6 +360,48 @@ aws s3 cp MGT.csv.gz s3://${TARGET_BUCKET}/surveys/raw/EMAs/job_personality_heal
 
 ## Histograms
 
+cat > started_histo.awk <<EOF
+BEGIN {
+    FS = ",";
+    prev = "";
+    K=0;
+}
+\$2 == prev {
+    print sprintf("%.1f", K / (K + \$1) * 100);
+    K = 0;
+    next;
+}
+K > 0 && \$3 == 0 {
+    print "0.0";
+    K = \$1;
+    prev = \$2;
+    next;
+}
+K == 0 && \$3 == 0 {
+    K = \$1;
+    prev = \$2;
+    next;
+}
+K > 0 && \$3 == 1 {
+    print "0.0";
+    print "100.0";
+    K = 0;
+    prev = \$2;
+    next;
+}
+K == 0 && \$3 == 1 {
+    print "100.0";
+    K = 0;
+    prev = \$2;
+    next;
+}
+END {
+    if (K > 0)
+        print "0.0";
+}
+EOF
+
+
 # Job
 zcat MGT.csv.gz | \
     gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" "NR > 1 {print $(zcat MGT.csv.gz | head -n1 | tr , '\n' | nl | grep -v Time | awk '{print $1}' | tr '\n' ',' | sed -e 's/,$//' -e 's/,/,$/g' -e 's/^/$/')}" | \
@@ -284,6 +418,14 @@ zcat MGT.csv.gz | \
     sort | \
     awk -v OFS="," -v FS="," 'BEGIN {prev = ""; X=0; N=0;} {if (prev != $1) { if (length(prev) > 0) {printf("%.1f\n", X / N * 100); X=0; N=0} prev=$1} X += $2; N += $3} END {printf("%.1f\n", X / N * 100)}' | \
     sort -n | uniq -c
+
+# Started Job survey percentage histogram
+zcat MGT.csv.gz | \
+    awk -F, -v OFS=, '$2 ~ /job/ {print $1, int(length($4) > 0)}' | \
+    sort | uniq -c | \
+    sed -e 's/^ *\([0-9a-f]\)/\1/' -e 's/ /,/' | \
+    awk -f started_histo.awk
+
 
 # health
 zcat MGT.csv.gz | \
@@ -303,6 +445,15 @@ zcat MGT.csv.gz | \
     sort -n | \
     uniq -c
 
+# Started health survey percentage histogram
+zcat MGT.csv.gz | \
+    awk -F, -v OFS=, '$2 ~ /health/ {print $1, int(length($4) > 0)}' | \
+    sort | uniq -c | \
+    sed -e 's/^ *\([0-9a-f]\)/\1/' -e 's/ /,/' | \
+    awk -f started_histo.awk
+    
+    
+
 # Personality
 zcat MGT.csv.gz | \
     gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" "NR > 1 {print $(zcat MGT.csv.gz | head -n1 | tr , '\n' | nl | grep -v Time | awk '{print $1}' | tr '\n' ',' | sed -e 's/,$//' -e 's/,/,$/g' -e 's/^/$/')}" | \
@@ -320,6 +471,13 @@ zcat MGT.csv.gz | \
     awk -v OFS="," -v FS="," 'BEGIN {prev = ""; X=0; N=0;} {if (prev != $1) { if (length(prev) > 0) {printf("%.1f\n", X / N * 100); X=0; N=0} prev=$1} X += $2; N += $3} END {printf("%.1f\n", X / N * 100)}' | \
     sort -n | \
     uniq -c
+
+# Started Personality survey percentage histogram
+zcat MGT.csv.gz | \
+    awk -F, -v OFS=, '$2 ~ /personality/ {print $1, int(length($4) > 0)}' | \
+    sort | uniq -c | \
+    sed -e 's/^ *\([0-9a-f]\)/\1/' -e 's/ /,/' | \
+    awk -f started_histo.awk
 
 
 
@@ -602,6 +760,13 @@ zcat psychological_capital.csv.gz | \
     awk -v OFS="," -v FS="," 'BEGIN {prev = ""; X=0; N=0;} {if (prev != $1) { if (length(prev) > 0) {printf("%.1f\n", X / N * 100); X=0; N=0} prev=$1} X += $2; N += $3} END {printf("%.1f\n", X / N * 100)}' | \
     sort -n | uniq -c
 
+# Started survey percentage histogram
+zcat psychological_capital.csv.gz | \
+    tail -n+2 | \
+    sort | \
+    awk -F, -v OFS=, 'BEGIN {prev = ""; N = 0; K = 0;} {if (prev != $1) {if (length(prev) > 0) {printf("%.1f\n", K / N * 100); N = 0; K = 0;} prev = $1;} N++; if (length($3) > 0) K++;} END {printf("%.1f\n", K / N * 100);}' | \
+    sort -n | uniq -c
+
 # Psychological Flexibility
 
 # Name the columns, and remove the unused ones
@@ -658,7 +823,13 @@ zcat psychological_flexibility.csv.gz | \
     awk -v OFS="," -v FS="," 'BEGIN {prev = ""; X=0; N=0;} {if (prev != $1) { if (length(prev) > 0) {printf("%.1f\n", X / N * 100); X=0; N=0} prev=$1} X += $2; N += $3} END {printf("%.1f\n", X / N * 100)}' | \
     sort -n | uniq -c
 
-    
+# Started survey percentage histogram
+zcat psychological_flexibility.csv.gz | \
+    tail -n+2 | \
+    sort | \
+    awk -F, -v OFS=, 'BEGIN {prev = ""; N = 0; K = 0;} {if (prev != $1) {if (length(prev) > 0) {printf("%.1f\n", K / N * 100); N = 0; K = 0;} prev = $1;} N++; if (length($3) > 0) K++;} END {printf("%.1f\n", K / N * 100);}' | \
+    sort -n | uniq -c
+
     
 ## Histogram of the overall compliance
 
