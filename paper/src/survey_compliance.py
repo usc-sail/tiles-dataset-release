@@ -232,7 +232,7 @@ def ComputeSurveyCompliance(root_data_path, tikz_out_folder=None):
 
       # Generate histogram of the compliance per participant 
       hist_valid = []
-      hist_stated = []
+      hist_started = []
       for participant_id in smgt_compliance[survey_type].keys():
          num_valid = smgt_compliance[survey_type][participant_id]['num_valid']
          num_possible = smgt_compliance[survey_type][participant_id]['num_possible']
