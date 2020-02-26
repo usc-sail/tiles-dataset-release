@@ -64,7 +64,6 @@ def ComputeSurveyCompliance(root_data_path, tikz_out_folder=None):
       if not os.path.isdir(tikz_out_folder):
          os.makedirs(tikz_out_folder)
 
-   plt.ion()
    fig, ax = plt.subplots(2,3)
    fig2, ax2 = plt.subplots(2,3)
 
@@ -236,7 +235,9 @@ def ComputeSurveyCompliance(root_data_path, tikz_out_folder=None):
       for participant_id in smgt_compliance[survey_type].keys():
          num_valid = smgt_compliance[survey_type][participant_id]['num_valid']
          num_possible = smgt_compliance[survey_type][participant_id]['num_possible']
-         hist_valid.append(float(num_valid)/num_possible)
+         if num_possible > 0:
+            hist_valid.append(float(num_valid)/num_possible)
+
          num_surveys_started = smgt_compliance[survey_type][participant_id]['num_surveys_started']
          num_surveys = smgt_compliance[survey_type][participant_id]['num_surveys']
          hist_started.append(float(num_surveys_started)/num_surveys)
@@ -283,7 +284,8 @@ def ComputeSurveyCompliance(root_data_path, tikz_out_folder=None):
             num_surveys_started += smgt_compliance[smgt_survey_type][participant_id]['num_surveys_started']
             num_surveys += smgt_compliance[smgt_survey_type][participant_id]['num_surveys']
 
-      hist_valid.append(float(num_valid_responses)/num_possible_responses)
+      if num_possible_responses > 0:
+         hist_valid.append(float(num_valid_responses)/num_possible_responses)
       hist_started.append(float(num_surveys_started)/num_surveys)
 
    ax[1][-1].hist(hist_valid, bins=bins)
@@ -296,8 +298,10 @@ def ComputeSurveyCompliance(root_data_path, tikz_out_folder=None):
    ax2[1][-1].set_ylabel('Number of Participants')
 
    if tikz_out_folder is not None:
-      tikz_out_path = os.path.join(tikz_out_folder, 'survey_compliance.tex')
-      tikzplotlib.save(tikz_out_path)
+      tikz_compliance_path = os.path.join(tikz_out_folder, 'survey_compliance.tex')
+      tikz_started_path = os.path.join(tikz_out_folder, 'surveys_started.tex')
+      tikzplotlib.save(filepath=tikz_compliance_path, figure=fig)
+      tikzplotlib.save(filepath=tikz_started_path, figure=fig2)
    else:
       plt.show()
 
