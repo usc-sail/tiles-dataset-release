@@ -224,39 +224,82 @@ aws s3 sync s3://${RAW_BUCKET}/ground_truth/MGT/ . --exclude '*July*'
 aws s3 cp s3://${PROCESSED_BUCKET}/id-mapping/mitreids.csv .
 aws s3 cp s3://${TARGET_BUCKET}/metadata/participant-info/participant-info.csv.gz .
 
+# clean up mitre ids
+sed -i -e 's/\r//g' mitreids.csv
+
+# Remove anything from before the beginning of the study
 rm *201802* *20180301* *20180302* *20180303* *20180304*
+
+# Remove a duplicated row
+head -n-1 USC_PILOT_20180406_personality_6pm.csv > tmp_USC_PILOT_20180406_personality_6pm.csv
+mv tmp_USC_PILOT_20180406_personality_6pm.csv USC_PILOT_20180406_personality_6pm.csv
+
+# Rename the files for sorting
 for f in USC*
 do
     mv $f $(echo $f | sed -e 's/USC_\(NIGHT\|DAY\|PILOT\)_\([0-9]*\)_\(job\|health\|personality\)_\(12[ap]m\|6[ap]m\)/\2_\4_\1_\3/' -e 's/6pm/1800/' -e 's/12am/0000/' -e 's/[ap]m/00/' -e 's/600/0600/');
 done
 
+# Add the pilot participants data to the correct file
+for f in *PILOT*
+do
+    g=$(ls | grep -E "${f:0:13}.*(DAY|NIGHT)" | head -n1)
+    tail -n+3 $f >> $g
+done
+rm *PILOT*
+
+# Remove rows that don't make sense (empty participant_id)
+for f in 2018*
+do
+    gawk -F, -v OFS=, -v FPAT="([^,]*)|(\"[^\"]+\")" -i inplace 'NR <= 2 || length($6) > 0 {print}' $f
+done
+
+
+# Get the list of enrolled participants over time
 zcat participant-info.csv.gz | \
-    awk -F, -v OFS=, '$7 ~ /Day/ {print $1, 1, $8} $7 ~ /Night/ {print $1, 0, $8}' > tmp.csv
+    awk -F, -v OFS=, '$7 ~ /Day/ {cmd = "grep "$1" mitreids.csv | cut -d, -f2"; cmd | getline tmp; print $1, 1, $8, tmp} $7 ~ /Night/ {cmd = "grep "$1" mitreids.csv | cut -d, -f2"; cmd | getline tmp; print $1, 0, $8, tmp}' > tmp.csv 
 
-grep -E "$(grep '1,1' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
-    cut -d, -f2 | sed -e 's/\r//g' > day_0305-0408.csv
-grep -E "$(grep '0,1' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
-    cut -d, -f2 | sed -e 's/\r//g' > night_0305-0408.csv
+grep -E "$(grep ',[01],1' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' | sort > participants_0305-0408.csv
+grep -E "$(grep ',1,1' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' | sort > day_0305-0408.csv
+grep -E "$(grep ',0,1' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' | sort  > night_0305-0408.csv
 
-grep -E "$(grep -E '1,[12]' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
-    cut -d, -f2 | sed -e 's/\r//g' > day_0409-0503.csv
-grep -E "$(grep -E '0,[12]' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
-    cut -d, -f2 | sed -e 's/\r//g' > night_0409-0503.csv
+grep -E "$(grep -E ',[01],[12]' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' | sort  > participants_0409-0416.csv
+grep -E "$(grep -E ',1,[12],S[DY]' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' | sort  > day_0409-0416.csv
+grep -E "$(grep -E '(,0,[12]|,1,[12],SG)' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' | sort  > night_0409-0416.csv
 
-grep -E "$(grep -E '1,[123]' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
-    cut -d, -f2 | sed -e 's/\r//g' > day_0504-0514.csv
-grep -E "$(grep -E '0,[123]' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
-    cut -d, -f2 | sed -e 's/\r//g' > night_0504-0514.csv
+grep -E "$(grep -E ',[01],[12]' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' | sort  > participants_0417-0503.csv
+grep -E "$(grep -E ',1,[12]' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' | sort  > day_0417-0503.csv
+grep -E "$(grep -E ',0,[12]' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' | sort  > night_0417-0503.csv
 
-grep -E "$(grep -E '1,[23]' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
-    cut -d, -f2 | sed -e 's/\r//g' > day_0515-0618.csv
-grep -E "$(grep -E '0,[23]' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
-    cut -d, -f2 | sed -e 's/\r//g' > night_0515-0618.csv
+grep -E "$(grep -E ',[01],[123]' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' | sort  > participants_0504-0514.csv
+grep -E "$(grep -E ',1,[123]' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' | sort  > day_0504-0514.csv
+grep -E "$(grep -E ',0,[123]' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' | sort  > night_0504-0514.csv
 
-grep -E "$(grep '1,3' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
-    cut -d, -f2 | sed -e 's/\r//g' > day_0619-0714.csv
-grep -E "$(grep '0,3' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
-    cut -d, -f2 | sed -e 's/\r//g' > night_0619-0714.csv
+grep -E "$(grep -E ',[01],[23]' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' | sort  > participants_0515-0618.csv
+grep -E "$(grep -E ',1,[23]' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' | sort  > day_0515-0618.csv
+grep -E "$(grep -E ',0,[23]' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' | sort  > night_0515-0618.csv
+
+grep -E "$(grep ',[01],3' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' | sort  > participants_0619-0714.csv
+grep -E "$(grep ',1,3' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' | sort  > day_0619-0714.csv
+grep -E "$(grep ',0,3' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' | sort  > night_0619-0714.csv
 
 for f in 2018*
 do
@@ -269,27 +312,33 @@ do
     set=""
     filemonth=${f:4:2}
     fileday=${f:6:2}
-    if [[ $filemonth -ge 4 ]] && [[ $fileday -ge 9 ]]
+    if [[ $filemonth -gt 4 ]] || ( [[ $filemonth -eq 4 ]] && [[ $fileday -ge 9 ]] )
     then
-        if [[ $filemonth -eq 5 ]] && [[ $fileday -gt 4 ]]
+        if [[ $filemonth -gt 4 ]] || ( [[ $filemonth -eq 4 ]] && [[ $fileday -ge 17 ]] )
         then
-            if [[ $filemonth -eq 5 ]] && [[ $fileday -gt 15 ]]
+            if [[ $filemonth -gt 5 ]] || ( [[ $filemonth -eq 5 ]] && [[ $fileday -ge 4 ]] )
             then
-                if [[ $filemonth -eq 6 ]] && [[ $fileday -gt 19 ]]
+                if [[ $filemonth -gt 5 ]] || ( [[ $filemonth -eq 5 ]] && [[ $fileday -ge 15 ]] )
                 then
-                    # fifth interval
-                    set=0619-0714
+                    if [[ $filemonth -gt 6 ]] || ( [[ $filemonth -eq 6 ]] && [[ $fileday -ge 19 ]] )
+                    then
+                        # fifth interval
+                        set=0619-0714
+                    else
+                        # fourth interval
+                        set=0515-0618
+                    fi
                 else
-                    # fourth interval
-                    set=0515-0618
+                    # third interval
+                    set=0504-0514
                 fi
             else
-                # third interval
-                set=0504-0514
+                # second interval
+                set=0417-0503
             fi
         else
             # second interval
-            set=0409-0503
+            set=0409-0416
         fi
     else
         # first interval
@@ -316,9 +365,41 @@ do
         fi
     fi
     
+    # First, remove participants that are not in the study yet/anymore
+    grep -E "Q_TotalDuration|$(cat participants_${set}.csv | tr '\n' '|' | sed -e 's/|$//')" $f > $f.tmp
+    mv $f.tmp $f
+    
     # Then, add back the missing ones.
-    grep -vE "$(tail -n+3 $f | awk -F, '{print $6}' | tr '\n' '|' | sed -e 's/|$//')" "${shift}_${set}.csv" | \
-        awk -v OFS=, '{$5=0; $6=$1; $7="'"${fileday}/${filemonth}"'/2018"; $9="'"$surveytype"'"; $11="'"$surveytime"'"; print}' >> $f
+    grep -vE "$(tail -n+3 $f | awk -F, '{print $6}' | tr '\n' '|' | sed -e 's/|*$//' -e 's/^|*//' -e 's/|\+/|/g')" "${shift}_${set}.csv" | \
+        awk -v OFS=, '{$5=0; $6=$1; $7="'"${filemonth}/${fileday}"'/2018"; $9="'"$surveytype"'"; $11="'"$surveytime"'"; print}' >> $f
+done
+
+# Then, remove the data for the dropouts
+for dropout in $(zcat participant-info.csv.gz | awk -F, -v OFS=, 'length($9) > 0 && NR > 1 {print $1, $9}')
+do
+    participant=$(echo $dropout | cut -d, -f1)
+    lastdate=$(echo $dropout | cut -d, -f2)
+    lastdatemonth=${lastdate:5:2}
+    lastdateday=${lastdate:8:2}
+    
+    datestoremove="$(eval ls $(seq $((${lastdateday:1:1} + 1)) 9 | sed -e "s/^/2018${lastdatemonth}${lastdateday:0:1}/" -e 's/$/*/'))"
+    for x in $(seq $((${lastdateday:0:1} + 1)) 3)
+    do
+        datestoremove="$datestoremove $(ls 2018${lastdatemonth}${x}*)"
+    done
+    for m in $(seq $((${lastdatemonth:1:1} + 1)) 7)
+    do
+        datestoremove="$datestoremove $(ls 20180${m}*)"
+    done
+    datestoremove=$(echo $datestoremove | tr ' ' '\n')
+#     echo $participant, $lastdate
+    
+    participant_mitre=$(grep $participant mitreids.csv | cut -d, -f2)
+    
+    for f in $(echo $datestoremove | tr '\n' ' ')
+    do
+        sed -i "/,${participant_mitre},/d" $f
+    done
 done
 
 (
@@ -359,6 +440,49 @@ aws s3 cp MGT.csv.gz s3://${TARGET_BUCKET}/surveys/raw/EMAs/job_personality_heal
 
 
 ## Histograms
+
+# Version with N and K on the output (K = number of surveys left unanswered)
+cat > started_histo.awk <<EOF
+BEGIN {
+    FS = ",";
+    OFS = ",";
+    prev = "";
+    K=0;
+}
+\$2 == prev {
+    print prev, sprintf("%.1f", \$1 / (K + \$1) * 100), \$1, K + \$1;
+    K = 0;
+    next;
+}
+K > 0 && \$3 == 0 {
+    print prev, "0.0", 0, K;
+    K = \$1;
+    prev = \$2;
+    next;
+}
+K == 0 && \$3 == 0 {
+    K = \$1;
+    prev = \$2;
+    next;
+}
+K > 0 && \$3 == 1 {
+    print prev, "0.0", 0, K;
+    print \$2, "100.0", \$1, \$1;
+    K = 0;
+    prev = \$2;
+    next;
+}
+K == 0 && \$3 == 1 {
+    print \$2, "100.0", \$1, \$1;
+    K = 0;
+    prev = \$2;
+    next;
+}
+END {
+    if (K > 0)
+        print prev, "0.0", 0, K;
+}
+EOF
 
 cat > started_histo.awk <<EOF
 BEGIN {
@@ -427,6 +551,7 @@ zcat MGT.csv.gz | \
     awk -f started_histo.awk
 
 
+
 # health
 zcat MGT.csv.gz | \
     gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" "NR > 1 {print $(zcat MGT.csv.gz | head -n1 | tr , '\n' | nl | grep -v Time | awk '{print $1}' | tr '\n' ',' | sed -e 's/,$//' -e 's/,/,$/g' -e 's/^/$/')}" | \
@@ -453,6 +578,7 @@ zcat MGT.csv.gz | \
     awk -f started_histo.awk
     
     
+
 
 # Personality
 zcat MGT.csv.gz | \
@@ -761,7 +887,7 @@ zcat psychological_capital.csv.gz | \
     sort -n | uniq -c
 
 # Started survey percentage histogram
-zcat psychological_capital.csv.gz | \
+zcat psychological_capital-Psycap_Location_Activity_Engage_IS_CS_HS.csv.gz | \
     tail -n+2 | \
     sort | \
     awk -F, -v OFS=, 'BEGIN {prev = ""; N = 0; K = 0;} {if (prev != $1) {if (length(prev) > 0) {printf("%.1f\n", K / N * 100); N = 0; K = 0;} prev = $1;} N++; if (length($3) > 0) K++;} END {printf("%.1f\n", K / N * 100);}' | \
@@ -824,7 +950,7 @@ zcat psychological_flexibility.csv.gz | \
     sort -n | uniq -c
 
 # Started survey percentage histogram
-zcat psychological_flexibility.csv.gz | \
+zcat psychological_flexibility-Activity_Experience_PF.csv.gz | \
     tail -n+2 | \
     sort | \
     awk -F, -v OFS=, 'BEGIN {prev = ""; N = 0; K = 0;} {if (prev != $1) {if (length(prev) > 0) {printf("%.1f\n", K / N * 100); N = 0; K = 0;} prev = $1;} N++; if (length($3) > 0) K++;} END {printf("%.1f\n", K / N * 100);}' | \
