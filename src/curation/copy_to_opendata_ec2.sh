@@ -687,3 +687,84 @@ done
 
 cd ..
 rm -Rf tmp
+
+
+
+
+
+
+# Fitbit Sleep
+
+mkdir raw
+aws s3 sync s3://${RAW_BUCKET_1}/fitbit/ fitbit/
+
+for f in fitbit/*
+do
+    zcat $f
+done | \
+    jq -crM '.sleep.sleep[].levels.data[].participant_id = .participant_id | .sleep.sleep[] | .levels.data[] | [.participant_id, .dateTime, .level, .seconds] | @csv' | \
+    sed -e 's/"//g' | \
+    awk -F, -v OFS=, '{print $2, $3, $4 | "gzip -9 > "$1".csv.gz"}'
+
+
+# Optional: filter out anything outside the range
+aws s3 cp s3://${TARGET_BUCKET}/metadata/participant-info/participant-info.csv.gz .
+
+mkdir final
+for f in *.csv.gz
+do
+    uid=${f//.csv.gz/}
+    wave=$(zgrep "$uid" participant-info.csv.gz | cut -d, -f8)
+    dropout=$(zgrep "$uid" participant-info.csv.gz | cut -d, -f9)
+    
+    if [[ ${#wave} -eq 0 ]]
+    then
+        continue
+    fi
+    
+    wave_regexp=".*"
+    if [[ $wave -eq 1 ]]
+    then
+        wave_regexp="^2018-0\\(2\\|3-0[0-4]\\|5-1[5-9]\\|5-[23]\\|[6-9]\\)"
+    elif [[ $wave -eq 2 ]]
+    then
+        wave_regexp="^2018-0\\([23]\\|4-0[0-8]\\|6-19\\|6-[23]\\|[7-9]\\)"
+    elif [[ $wave -eq 3 ]]
+    then
+        wave_regexp="^2018-0\\([234]\\|5-0[0-3]\\|7-1[5-9]\\|7-[23]\\|[8-9]\\)"
+    fi
+    
+    (
+        echo "timestamp,sleep_phase,duration";
+        if [[ ${#dropout} -ge 1 ]]
+        then
+            month_dropout=${dropout:6:1}
+            day_tens_dropout=${dropout:8:1}
+            day_units_dropout=${dropout:9:1}
+            
+            echo "/${wave_regexp}/d" > tmp.sed
+            if [[ $day_units_dropout -le 8 ]]
+            then
+                echo "/^2018-0${month_dropout}-${day_tens_dropout}[$(( $day_units_dropout + 1 ))9]/d" >> tmp.sed
+            fi
+            if [[ $day_tens_dropout -le 2 ]] 
+            then
+                echo "/^2018-0${month_dropout}-[$(( $day_tens_dropout + 1 ))3]/d" >> tmp.sed
+            fi
+            if [[ $month_dropout -le 8 ]]
+            then
+                echo "/^2018-0[$(( ${month_dropout} + 1 ))9]/d" >> tmp.sed
+            fi
+            
+            zcat $f | \
+                sed -f tmp.sed
+        else
+            zcat $f | \
+                sed -e "/$wave_regexp/d"
+        fi
+    ) | \
+        gzip -f -9 > final/$f
+done
+
+# Upload
+aws s3 sync final/ s3://${TARGET_BUCKET}/fitbit/sleep/
