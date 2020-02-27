@@ -39,7 +39,7 @@ The Owl-in-One sensors are hubs that aggregated Bluetooth transmissions from oth
 
 ### RealizD
  1. Download the raw RealizD data and store in the `<raw_realizd_path>` folder
- 1. `1_raw_json_to_csv/realizd_preocessor.py <data_record_path>/realizd`
+ 1. `1_raw_json_to_csv/realizd_preprocessor.py <data_record_path>/realizd`
 
 ### Surveys
 ***TODO - @Brandon, add the scoring R code once IARPA releases and approves it***
