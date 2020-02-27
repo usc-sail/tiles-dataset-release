@@ -25,7 +25,7 @@ function parse_commandline()
 
     @add_arg_table settings begin
         "--data_folder", "-r"
-            help = "Path to the data folder containing JSONL files."
+            help = "Path to the data folder containing csv.gz files."
             arg_type = String
             required = true
             range_tester = ispath
@@ -35,7 +35,7 @@ function parse_commandline()
             required = true
             range_tester = ispath
         "--sensor", "-s"
-            help = "Sensor information to parse from {owl, jelly}."
+            help = "Sensor information to parse from {owl, jelly, minew}."
             arg_type = String
             range_tester = (x -> x in ["jelly", "owl", "minew"])
             required = true
@@ -45,7 +45,7 @@ function parse_commandline()
             default = "deviceIDs.csv"
             arg_type = String
          "--directories", "-d"
-            help = "Directory -- receiverId mapping for each wave of data"
+            help = "Directory <-> receiverId mapping for each wave of data"
             required = false
             default = "directories_by_date_wav123.csv"
             arg_type = String

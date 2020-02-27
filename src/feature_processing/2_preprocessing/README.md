@@ -27,4 +27,35 @@ Each script will create any folders in the output path that do not already exist
 
 ### Julia
 
-@Karel - please add instructioins here
+There are Julia scripts under the folder `owlinone/`. This folder contains the scripts to process the CSV files generated using the file:
+
+```
+tiles-dataset-release/src/feature_processing/1_raw_json_to_csv/owlinone_jsonl_to_csv.sh
+```
+
+The script `process_csv.jl` has been developed and tested using Julia 1.2. Running `julia process_csv.jl --help` will give you the following instructions:
+
+```
+usage: process_csv.jl -r DATA_FOLDER -w WRITE_FOLDER -s SENSOR
+                      [-i DEVICEIDS] [-d DIRECTORIES] [-f FILES] [-h]
+
+optional arguments:
+  -r, --data_folder DATA_FOLDER
+                        Path to the data folder containing csv.gz
+                        files.
+  -w, --write_folder WRITE_FOLDER
+                        Path to the folder into which the files are
+                        written.
+  -s, --sensor SENSOR   Sensor information to parse from {owl, jelly, minew}.
+  -i, --deviceids DEVICEIDS
+                        DeviceIDs for each Owl-in-One. (default:
+                        "deviceIDs.csv")
+  -d, --directories DIRECTORIES
+                        Directory <-> receiverId mapping for each wave
+                        of data (default:
+                        "directories_by_date_wav123.csv")
+  -f, --files FILES     CSV file(s) to process in data_folder. It can
+                        be a regex such as *.csv.gz (default)
+                        (default: "*.csv.gz")
+  -h, --help            show this help message and exit
+```
