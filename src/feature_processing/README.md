@@ -2,7 +2,8 @@
 All of the code used to convert the raw sensor data into the published dataset format is provided here.  The code is provided as documentation for reproducibility and curious investigators, but the fully processed dataset is conveniently available for download at <https://tiles-data.isi.edu>.
 
 The processing is split into three stages:
- - Stage 1: Raw JSON format conversion to tabular CSV format
+
+ - Stage 1: Raw JSONL format conversion to tabular CSV format
  - Stage 2: Preprocessing to fix or mark artifacts in the data
  - Stage 3: Feature extraction
 
@@ -24,9 +25,23 @@ This section provides the sequence of scripts that need to be executed to conver
 ### Owl-in-One
 The Owl-in-One sensors are hubs that aggregated Bluetooth transmissions from other sensors.  The Minew (environmental sensors), Jelly (proximity tracking), and other Owl-in-One (localization) are all included in the raw JSON data.  Different scripts parse the raw data to extract each sensor stream.  Details are below.
 
-#### Owls
-***TODO - @Karel, please split up the Julia code so it runs in two stages: (1) raw data tabulation and (2) preprocessing. Also, please remove the dependency on the `jelly_id_mapping_wav*.csv` files by allowing users to pass in a path to those files on the command line, then make sure these files are included in the dataset.***
- 1. ***TODO - @Karel, please include instructions on running the code.***
+#### Owls (RSSI data)
+There instructions are meant to extract the RSSI information from the raw JSONL files from Owl-in-One to Owl-in-One interactions, Jelly to Owl-in-One interactions, and Minew to Owl-in-One interactions.
+
+ 1. Download the Owl-in-One data and store in the `<raw_owlinone_path>` folder
+ 2. Copy the file `1_raw_json_to_csv/owlinone_jsonl_to_csv.sh` file into the `<raw_owlinone_path>` folder. Change directory into the `<raw_owlinone_path>` folder and run (from the command line) the `owlinone_jsonl_to_csv.sh` file using:
+```
+$ ./owlinone_jsonl_to_csv.sh
+```
+This will generate three folders: `hoots/`, `minew`, `jelly` with the RSSI data from each stream.
+ 3. Process the raw CSV files generated in `<raw_owlinone_path>/hoots`, `<raw_owlinone_path>/minew`, and `<raw_owlinone_path>/jelly`. These files can be processed using the `2_preprocessing/owlinone/process_csv.jl` file as such:
+```
+julia process_csv.jl -r <raw_owlinone_path/stream> -w WRITE_FOLDER -s SENSOR
+```
+where sensor can be any of `owl`, `jelly`, `minew`. For more information on running this script, please run
+```
+julia process_csv.jl --help
+```
 
 #### Minew
  1. Download the raw Owl-in-One data and store in the `<raw_owl_path>` folder
@@ -34,8 +49,12 @@ The Owl-in-One sensors are hubs that aggregated Bluetooth transmissions from oth
  1. `2_preprocessing/minew_preprocess.py <minew_csv_path> <data_record_path>/owlinone/minew/data`
 
 #### Jelly
-***TODO - @Karel, please split up the Julia code so it runs in two stages: (1) raw data tabulation and (2) preprocessing. Also, please remove the dependency on the `jelly_id_mapping_wav*.csv` files by allowing users to pass in a path to those files on the command line, then make sure these files are included in the dataset.***
- 1. ***TODO - @Karel, please include instructions on running the code.***
+1. See above (Owls - RSSI data)
+2. Run `2_preprocessing/owlinone/split_jelly_events_by_participant.jl`:
+```
+julia split_jelly_events_by_participant.jl -r DATA_FOLDER -i MAPPING
+                        [-w WRITE_FOLDER] [-f FILES]
+```
 
 ### RealizD
  1. Download the raw RealizD data and store in the `<raw_realizd_path>` folder
