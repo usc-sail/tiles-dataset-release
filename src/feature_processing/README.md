@@ -41,10 +41,6 @@ The Owl-in-One sensors are hubs that aggregated Bluetooth transmissions from oth
  1. Download the raw RealizD data and store in the `<raw_realizd_path>` folder
  1. `1_raw_json_to_csv/realizd_preprocessor.py <data_record_path>/realizd`
 
-### Surveys
-***TODO - @Brandon, add the scoring R code once IARPA releases and approves it***
- 1. ***TODO - @Brandon, include instructions for running the code***
-
 ### Days at Work
  1. Download the OMsignal data, the Owl-in-One data, and the survey data.
  2. Run the script as follows:
