@@ -695,24 +695,95 @@ rm -Rf tmp
 
 # Fitbit Sleep
 
-mkdir raw
+mkdir fitbit/
 aws s3 sync s3://${RAW_BUCKET_1}/fitbit/ fitbit/
 
-for f in fitbit/*
+# Get a new mapping for fitbit's sleep data logId
+for f in fitbit/*.jsonl.gz
+do
+    zcat $f;
+done | \
+    jq '.sleep.sleep[] | .logId' | \
+    sort -u | \
+    nl --number-separator=, -w1 > fitbit_sleep_ids_mapping.csv
+
+# Extract the sleep metadata
+rm sleep_id_mapping.sed
+while read map
+do
+    echo $map | sed -e 's@^\(.*\),\(.*\)$@s/^\2,/\1,/@' >> sleep_id_mapping.sed
+done < fitbit_sleep_ids_mapping.csv
+
+mkdir metadata
+for f in fitbit/*.jsonl.gz
 do
     zcat $f
 done | \
-    jq -crM '.sleep.sleep[].levels.data[].participant_id = .participant_id | .sleep.sleep[] | .levels.data[] | [.participant_id, .dateTime, .level, .seconds] | @csv' | \
+    jq -crM '.sleep.sleep[].participant_id = .participant_id | .sleep.sleep | sort_by(.startTime) | .[] | [.logId, .isMainSleep, .timeInBed, .minutesAsleep, .minutesAwake, .infoCode, .type, .duration, .efficiency, .endTime, .minutesAfterWakeup, .startTime, .dateOfSleep, .minutesToFallAsleep, .participant_id] | @csv' | \
     sed -e 's/"//g' | \
-    awk -F, -v OFS=, '{print $2, $3, $4 | "gzip -9 > "$1".csv.gz"}'
+    sed -f sleep_id_mapping.sed | \
+    awk -F, -v OFS=, '{uid = $(NF); --NF; print | "gzip -9 > metadata/"uid".csv.gz"}'
+
+mkdir metadata_processed
+for f in metadata/*.csv.gz
+do
+    (
+        echo sleepId,isMainSleep,timeInBed,minutesAsleep,minutesAwake,infoCode,type,duration,efficiency,endTime,minutesAfterWakeup,startTime,dateOfSleep,minutesToFallAsleep
+        zcat $f
+    ) | \
+        gzip -9 > ${f//metadata/metadata_processed}
+done
+
+# Extract the sleep data
+mkdir data
+for f in metadata_processed/*.csv.gz
+do
+    echo sleepId,dateTime,level,seconds | gzip -9 > ${f//metadata_processed/data}
+done
+for f in fitbit/*.jsonl.gz
+do
+    zcat $f
+done | \
+    jq -crM '.sleep.sleep[].levels.data[].participant_id = .participant_id | .sleep.sleep | map(.levels.data[].sleepId = .logId) | sort_by(.startTime) | .[] | .levels.data[] | [.sleepId, .dateTime, .level, .seconds, .participant_id] | @csv' | \
+    sed -e 's/"//g' | \
+    sed -f sleep_id_mapping.sed | \
+    awk -F, -v OFS=, '{uid = $(NF); --NF; print | "gzip -9 >> data/"uid".csv.gz"}'
 
 
 # Optional: filter out anything outside the range
+# First, we filter the metadata, then we keep only the sleepIds kept in the metadata
 aws s3 cp s3://${TARGET_BUCKET}/metadata/participant-info/participant-info.csv.gz .
 
-mkdir final
-for f in *.csv.gz
+mkdir metadata-opendataset
+
+WAVE_1_REGEXP="[26-9]"                          # Remove February and June and after
+WAVE_1_REGEXP="$WAVE_1_REGEXP 3-0[1-3]"         # Remove beginning of March
+WAVE_1_REGEXP="$WAVE_1_REGEXP 3-04.*2018-03-04" # Remove 4th March only (the day before the data collection begins)
+WAVE_1_REGEXP="$WAVE_1_REGEXP 5-15.*2018-05-15" # Remove 15th May only (the day after the data collection ends)
+WAVE_1_REGEXP="$WAVE_1_REGEXP 5-1[6-9]"         # Remove end of May (tens)
+WAVE_1_REGEXP="$WAVE_1_REGEXP 5-[2-3]"          # Remove end of May
+WAVE_1_REGEXP="2018-0\\($(echo $WAVE_1_REGEXP | sed -e 's/ /\\|/g')\\)" # Create the regexp for wave 1
+
+WAVE_2_REGEXP="[237-9]"                         # Remove February to March and July and after
+WAVE_2_REGEXP="$WAVE_2_REGEXP 4-0[1-7]"         # Remove beginning of April
+WAVE_2_REGEXP="$WAVE_2_REGEXP 4-08.*2018-04-08" # Remove 8th April only (the day before the data collection begins)
+WAVE_2_REGEXP="$WAVE_2_REGEXP 6-19.*2018-06-19" # Remove 19th June only (the day after the data collection ends)
+WAVE_2_REGEXP="$WAVE_2_REGEXP 6-[23]"           # Remove end of June
+WAVE_2_REGEXP="2018-0\\($(echo $WAVE_2_REGEXP | sed -e 's/ /\\|/g')\\)" # Create the regexp for wave 2
+
+WAVE_3_REGEXP="[2-489]"                         # Remove February to April and August and after
+WAVE_3_REGEXP="$WAVE_3_REGEXP 5-0[1-2]"         # Remove beginning of May
+WAVE_3_REGEXP="$WAVE_3_REGEXP 5-03.*2018-05-03" # Remove 3rd May only (the day before the data collection begins)
+WAVE_3_REGEXP="$WAVE_3_REGEXP 7-15.*2018-07-15" # Remove 15th July only (the day after the data collection ends)
+WAVE_1_REGEXP="$WAVE_1_REGEXP 7-1[6-9]"         # Remove end of July (tens)
+WAVE_3_REGEXP="$WAVE_3_REGEXP 7-[23]"           # Remove end of July
+WAVE_3_REGEXP="2018-0\\($(echo $WAVE_3_REGEXP | sed -e 's/ /\\|/g')\\)" # Create the regexp for wave 3
+
+
+
+for f in metadata_processed/*.csv.gz
 do
+    f=${f//metadata_processed\//}
     uid=${f//.csv.gz/}
     wave=$(zgrep "$uid" participant-info.csv.gz | cut -d, -f8)
     dropout=$(zgrep "$uid" participant-info.csv.gz | cut -d, -f9)
@@ -725,46 +796,59 @@ do
     wave_regexp=".*"
     if [[ $wave -eq 1 ]]
     then
-        wave_regexp="^2018-0\\(2\\|3-0[0-4]\\|5-1[5-9]\\|5-[23]\\|[6-9]\\)"
+        wave_regexp="$WAVE_1_REGEXP"
     elif [[ $wave -eq 2 ]]
     then
-        wave_regexp="^2018-0\\([23]\\|4-0[0-8]\\|6-19\\|6-[23]\\|[7-9]\\)"
+        wave_regexp="$WAVE_2_REGEXP"
     elif [[ $wave -eq 3 ]]
     then
-        wave_regexp="^2018-0\\([234]\\|5-0[0-3]\\|7-1[5-9]\\|7-[23]\\|[8-9]\\)"
+        wave_regexp="$WAVE_3_REGEXP"
     fi
     
-    (
-        echo "timestamp,sleep_phase,duration";
-        if [[ ${#dropout} -ge 1 ]]
+    if [[ ${#dropout} -ge 1 ]]
+    then
+        month_dropout=${dropout:6:1}
+        day_tens_dropout=${dropout:8:1}
+        day_units_dropout=${dropout:9:1}
+        
+        # Wave filter
+        echo "/${wave_regexp}/d" > tmp.sed
+        # Dropout day only (i.e. appears twice in the metadata row)
+        echo "/${dropout}.*${dropout}/d" >> tmp.sed
+        # Anytime the day after the dropout
+        if [[ $day_units_dropout -le 8 ]]
         then
-            month_dropout=${dropout:6:1}
-            day_tens_dropout=${dropout:8:1}
-            day_units_dropout=${dropout:9:1}
-            
-            echo "/${wave_regexp}/d" > tmp.sed
-            if [[ $day_units_dropout -le 8 ]]
-            then
-                echo "/^2018-0${month_dropout}-${day_tens_dropout}[$(( $day_units_dropout + 1 ))9]/d" >> tmp.sed
-            fi
-            if [[ $day_tens_dropout -le 2 ]] 
-            then
-                echo "/^2018-0${month_dropout}-[$(( $day_tens_dropout + 1 ))3]/d" >> tmp.sed
-            fi
-            if [[ $month_dropout -le 8 ]]
-            then
-                echo "/^2018-0[$(( ${month_dropout} + 1 ))9]/d" >> tmp.sed
-            fi
-            
-            zcat $f | \
-                sed -f tmp.sed
-        else
-            zcat $f | \
-                sed -e "/$wave_regexp/d"
+            echo "/2018-0${month_dropout}-${day_tens_dropout}[$(( $day_units_dropout + 1 ))9]/d" >> tmp.sed
         fi
-    ) | \
-        gzip -f -9 > final/$f
+        if [[ $day_tens_dropout -le 2 ]] 
+        then
+            echo "/2018-0${month_dropout}-[$(( $day_tens_dropout + 1 ))3]/d" >> tmp.sed
+        fi
+        if [[ $month_dropout -le 8 ]]
+        then
+            echo "/2018-0[$(( ${month_dropout} + 1 ))9]/d" >> tmp.sed
+        fi
+        
+        zcat metadata_processed/$f | \
+            sed -f tmp.sed
+    else
+        zcat metadata_processed/$f | \
+            sed -e "/$wave_regexp/d"
+    fi | \
+        gzip -f -9 > metadata-opendataset/$f
 done
 
-# Upload
-aws s3 sync final/ s3://${TARGET_BUCKET}/fitbit/sleep/
+aws s3 sync metadata-opendataset/ s3://${TARGET_BUCKET}/fitbit/sleep-metadata/
+
+# Keep only the data associated to a kept sleepId
+
+mkdir data-opendataset
+for f in data/*
+do
+    f=${f//data\//}
+    zcat data/$f | \
+        sed -n "/^\($(zcat metadata-opendataset/$f | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//' -e 's/|/\\|/g')\),/p" | \
+        gzip -9 > data-opendataset/$f
+done
+
+aws s3 sync data-opendataset/ s3://${TARGET_BUCKET}/fitbit/sleep-data/

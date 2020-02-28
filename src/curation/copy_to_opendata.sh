@@ -202,16 +202,16 @@ aws s3 sync sorted/ s3://${TARGET_BUCKET}/realizd/
 
 
 cat > create_sent_timestamp.awk <<EOF
-\$11 ~ /12:00am/ || (\$11 ~/^$/ && \$(NF) ~ /0000/)  {
+\$11 ~ /12:00am/ || (\$11 ~ /^$/ && \$(NF) ~ /0000/)  {
     \$8 = \$7"T00:00:00";
 }
-\$11 ~ /6:00am/ || (\$11 ~/^$/ && \$(NF) ~ /0600/) {
+\$11 ~ /6:00am/  || (\$11 ~ /^$/ && \$(NF) ~ /0600/) {
     \$8 = \$7"T06:00:00";
 }
-\$11 ~ /12:00pm/ || (\$11 ~/^$/ && \$(NF) ~ /1200/) {
+\$11 ~ /12:00pm/ || (\$11 ~ /^$/ && \$(NF) ~ /1200/) {
     \$8 = \$7"T12:00:00";
 }
-\$11 ~ /6:00pm/ || (\$11 ~/^$/ && \$(NF) ~ /1800/) {
+\$11 ~ /6:00pm/  || (\$11 ~ /^$/ && \$(NF) ~ /1800/) {
     \$8 = \$7"T18:00:00";
 }
 {
@@ -256,6 +256,10 @@ done
 
 
 # Get the list of enrolled participants over time
+# ATTENTION: SG* participants from wave 2 switched from night to day shift on 04/16, and received 2 surveys on that day
+# ATTENTION: SG1056 is an exception: the day surveys only resumed on 04/18
+
+# Below, tmp.csv contains: participant_id, day(1) / night(0), wave, mitre ID
 zcat participant-info.csv.gz | \
     awk -F, -v OFS=, '$7 ~ /Day/ {cmd = "grep "$1" mitreids.csv | cut -d, -f2"; cmd | getline tmp; print $1, 1, $8, tmp} $7 ~ /Night/ {cmd = "grep "$1" mitreids.csv | cut -d, -f2"; cmd | getline tmp; print $1, 0, $8, tmp}' > tmp.csv 
 
@@ -267,18 +271,32 @@ grep -E "$(grep ',0,1' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" m
     cut -d, -f2 | sed -e 's/\r//g' | sort  > night_0305-0408.csv
 
 grep -E "$(grep -E ',[01],[12]' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
-    cut -d, -f2 | sed -e 's/\r//g' | sort  > participants_0409-0416.csv
+    cut -d, -f2 | sed -e 's/\r//g' | sort  > participants_0409-0415.csv
 grep -E "$(grep -E ',1,[12],S[DY]' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
-    cut -d, -f2 | sed -e 's/\r//g' | sort  > day_0409-0416.csv
+    cut -d, -f2 | sed -e 's/\r//g' | sort  > day_0409-0415.csv
 grep -E "$(grep -E '(,0,[12]|,1,[12],SG)' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
-    cut -d, -f2 | sed -e 's/\r//g' | sort  > night_0409-0416.csv
+    cut -d, -f2 | sed -e 's/\r//g' | sort  > night_0409-0415.csv
 
 grep -E "$(grep -E ',[01],[12]' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
-    cut -d, -f2 | sed -e 's/\r//g' | sort  > participants_0417-0503.csv
-grep -E "$(grep -E ',1,[12]' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
-    cut -d, -f2 | sed -e 's/\r//g' | sort  > day_0417-0503.csv
+    cut -d, -f2 | sed -e 's/\r//g' | sort  > participants_0416.csv
+grep -E "$(grep -E ',1,[12]' tmp.csv | grep -v 'SG1056' | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' | sort  > day_0416.csv
+grep -E "$(grep -E '(,0,[12]|,1,2,SG)' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' | sort  > night_0416.csv
+
+grep -E "$(grep -E ',[01],[12]' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' | sort  > participants_0417.csv
+grep -E "$(grep -E ',1,[12]' tmp.csv | grep -v 'SG1056' | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' | sort  > day_0417.csv
 grep -E "$(grep -E ',0,[12]' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
-    cut -d, -f2 | sed -e 's/\r//g' | sort  > night_0417-0503.csv
+    cut -d, -f2 | sed -e 's/\r//g' | sort  > night_0417.csv
+
+grep -E "$(grep -E ',[01],[12]' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' | sort  > participants_0418-0503.csv
+grep -E "$(grep -E ',1,[12]' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' | sort  > day_0418-0503.csv
+grep -E "$(grep -E ',0,[12]' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
+    cut -d, -f2 | sed -e 's/\r//g' | sort  > night_0418-0503.csv
 
 grep -E "$(grep -E ',[01],[123]' tmp.csv | cut -d, -f1 | tr '\n' '|' | sed -e 's/|$//')" mitreids.csv | \
     cut -d, -f2 | sed -e 's/\r//g' | sort  > participants_0504-0514.csv
@@ -314,31 +332,43 @@ do
     fileday=${f:6:2}
     if [[ $filemonth -gt 4 ]] || ( [[ $filemonth -eq 4 ]] && [[ $fileday -ge 9 ]] )
     then
-        if [[ $filemonth -gt 4 ]] || ( [[ $filemonth -eq 4 ]] && [[ $fileday -ge 17 ]] )
+        if [[ $filemonth -gt 4 ]] || ( [[ $filemonth -eq 4 ]] && [[ $fileday -ge 16 ]] )
         then
-            if [[ $filemonth -gt 5 ]] || ( [[ $filemonth -eq 5 ]] && [[ $fileday -ge 4 ]] )
+            if [[ $filemonth -gt 4 ]] || ( [[ $filemonth -eq 4 ]] && [[ $fileday -ge 17 ]] )
             then
-                if [[ $filemonth -gt 5 ]] || ( [[ $filemonth -eq 5 ]] && [[ $fileday -ge 15 ]] )
+                if [[ $filemonth -gt 4 ]] || ( [[ $filemonth -eq 4 ]] && [[ $fileday -ge 18 ]] )
                 then
-                    if [[ $filemonth -gt 6 ]] || ( [[ $filemonth -eq 6 ]] && [[ $fileday -ge 19 ]] )
+                    if [[ $filemonth -gt 5 ]] || ( [[ $filemonth -eq 5 ]] && [[ $fileday -ge 4 ]] )
                     then
-                        # fifth interval
-                        set=0619-0714
+                        if [[ $filemonth -gt 5 ]] || ( [[ $filemonth -eq 5 ]] && [[ $fileday -ge 15 ]] )
+                        then
+                            if [[ $filemonth -gt 6 ]] || ( [[ $filemonth -eq 6 ]] && [[ $fileday -ge 19 ]] )
+                            then
+                                # eighth interval
+                                set=0619-0714
+                            else
+                                # seventh interval
+                                set=0515-0618
+                            fi
+                        else
+                            # sixth interval
+                            set=0504-0514
+                        fi
                     else
-                        # fourth interval
-                        set=0515-0618
+                        # fifth interval
+                        set=0418-0503
                     fi
                 else
-                    # third interval
-                    set=0504-0514
+                    # fourth interval
+                    set=0417
                 fi
             else
-                # second interval
-                set=0417-0503
+                # third interval
+                set=0416
             fi
         else
             # second interval
-            set=0409-0416
+            set=0409-0415
         fi
     else
         # first interval
@@ -352,16 +382,16 @@ do
     then
         if [[ $surveytime -eq 12 ]]
         then
-            surveytime="12pm";
+            surveytime="12:00pm";
         else
-            surveytime="6pm";
+            surveytime="6:00pm";
         fi
     else
         if [[ $surveytime -eq 0 ]]
         then
-            surveytime="12am";
+            surveytime="12:00am";
         else
-            surveytime="6am";
+            surveytime="6:00am";
         fi
     fi
     
@@ -407,6 +437,7 @@ done
         sed -e 's/,*$//' -e 's/"//g' -e 's/$/,filename/'
     for f in *
     do
+        time_sent=${f}
         if echo $f | grep -q perso
         then
             tail -n+3 $f | \
