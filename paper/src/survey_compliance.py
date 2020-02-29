@@ -64,21 +64,35 @@ def ComputeSurveyCompliance(root_data_path, tikz_out_folder=None):
       if not os.path.isdir(tikz_out_folder):
          os.makedirs(tikz_out_folder)
 
+   igtb_fig, igtb_ax = plt.subplots(1,1)
    fig, ax = plt.subplots(2,3)
    fig2, ax2 = plt.subplots(2,3)
 
    #################
    # IGTB compliance
    #################
-   igtb_file = os.path.join(root_data_path,'surveys','scored','baseline','part_one-abs_vocab_gats_audit_psqi_ipaq_iod_ocb_irb_itp_bfi_pan_stai.csv.gz')
-   igtb_df = pd.read_csv(igtb_file)
-   igtb_df.loc[igtb_df.participant_id == 'SD1025', 'igtb_incomplete'] = 0 # This particpant did complete, but forgot to click submit
-   igtb_num_total = igtb_df.shape[0]
-   igtb_num_complete = igtb_num_total - np.sum(igtb_df['igtb_incomplete'] == 1)
-   igtb_opt_in = len(igtb_df['participant_id'].unique())
+   igtb_survey_cols = ['abs','vocab','gats_Status','gats_Quantity','audit','psqi','ipaq','iod_ID','iod_OD','ocb','irb','itp','bfi_Neuroticism','bfi_Conscientiousness','bfi_Extraversion','bfi_Agreeableness','bfi_Openness','pan_PosAffect','pan_NegAffect','stai','rand_PhysicalFunctioning','rand_LimitsPhysicalHealth','rand_LimitsEmotionalProblems','rand_EmotionalWellbeing','rand_SocialFunctioning','rand_Pain','rand_GeneralHealth','rand_EnergyFatigue','rand_Energy','rand_Fatigue','swls','pss','mpfi_Flexibility','mpfi_Flexibility_Acceptance','mpfi_Flexibility_PresentMomentAwareness','mpfi_Flexibility_SelfAsContext','mpfi_Flexibility_Defusion','mpfi_Flexibility_Values','mpfi_Flexibility_CommittedAction','mpfi_Inflexibility','mpfi_Inflexibility_ExperientialAvoidance','mpfi_Inflexibility_LackofContactWithPresentMoment','mpfi_Inflexibility_SelfAsContent','mpfi_Inflexibility_Fusion','mpfi_Inflexibility_LackofContactWithValues','mpfi_Inflexibility_Inaction','waaq','uwes','uwes_Vigor','uwes_Dedication','uwes_Absorption','pcq','pcq_Hope','pcq_Efficacy','pcq_Resilience','pcq_Optimism','chss_ChallengeStressors','chss_HindranceStressors']
+   igtb_part1_file = os.path.join(root_data_path,'surveys','scored','baseline','part_one-abs_vocab_gats_audit_psqi_ipaq_iod_ocb_irb_itp_bfi_pan_stai.csv.gz')
+   igtb_part2_file = os.path.join(root_data_path,'surveys','scored','baseline','part_two-rand_swls_pss_mpfi_waaq_uwes_pcq_chss.csv.gz')
+   igtb_df1 = pd.read_csv(igtb_part1_file)
+   igtb_df2 = pd.read_csv(igtb_part2_file)
+   igtb_df = igtb_df1.join(igtb_df2.set_index('participant_id'), on='participant_id', lsuffix='_part1', rsuffix='_part2')
+   igtb_df = igtb_df.replace(r'^\s*$', np.nan, regex=True)
+   igtb_df = igtb_df.loc[:,igtb_survey_cols]
+   valid_df = (~igtb_df.isna()).sum(axis=1)
+   igtb_num_complete = valid_df.values
+   igtb_num_total = len(igtb_survey_cols)
+   igtb_opt_in = np.sum(igtb_num_complete>0)
    num_participants_total = igtb_df.shape[0]
+
+   hist_igtb_valid = igtb_num_complete.astype(float)/igtb_num_total
+   igtb_ax.hist(hist_igtb_valid, bins=bins)
+   igtb_ax.title.set_text('Combined IGTB Survey Compliance Histogram Per Participant')
+   igtb_ax.set_xlabel('Ratio of Completed Questions')
+   igtb_ax.set_ylabel('Number of Participants')
+
    print("IGTB participant opt-in: (%d/%d) %3.2f%%"%(igtb_opt_in,num_participants_total, 100.0*float(igtb_opt_in)/num_participants_total))
-   print("IGTB compliance: (%d/%d) %3.2f%%"%(igtb_num_complete, igtb_num_total, 100.0*float(igtb_num_complete)/igtb_num_total))
+   print("IGTB compliance: (%d/%d) %3.2f%%"%(np.sum(igtb_num_complete), num_participants_total*igtb_num_total, 100.0*float(np.sum(igtb_num_complete))/(num_participants_total*igtb_num_total)))
    print("--------------------")
 
    ################
