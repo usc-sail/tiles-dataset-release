@@ -1080,16 +1080,45 @@ cat <(cat $FILENAME | head -n2) <(cat $FILENAME | tail -n+3 | sort) | \
 aws s3 cp s3://${PROCESSED_BUCKET}/id-mapping/mitreids.csv .
 aws s3 cp s3://${RAW_BUCKET}/ground_truth/pre-study/Pre_Study.csv.gz .
 
-FILENAME="demo_rand_swls_pss_mpfi_waaq_uwes_pcq_chss.csv"
+cat > rename_fields_baseline2_raw.awk <<EOF
+BEGIN {
+    FS=",";
+    OFS=",";
+    FPAT="([^,]*)|(\"[^\"]+\")";
+}
+NR == 1 {
+    \$1   = "participant_id";
+    \$2   = "demographics_completed_ts";
+    \$29  = "rand_completed_ts";
+    \$66  = "rand_complete";
+    \$67  = "swls_completed_ts";
+    \$73  = "swls_complete";
+    \$74  = "pss_completed_ts";
+    \$85  = "pss_complete";
+    \$86  = "mpfi_completed_ts";
+    \$111 = "mpfi_complete";
+    \$112 = "waaq_completed_ts";
+    \$120 = "waaq_complete";
+    \$121 = "uwes_completed_ts";
+    \$131 = "uwes_complete";
+    \$132 = "pcq_completed_ts";
+    \$145 = "pcq_complete";
+    \$146 = "chss_completed_ts";
+    \$163 = "chss_complete";
+}
+{ print }
+EOF
+
+FILENAME="part_two-demo_rand_swls_pss_mpfi_waaq_uwes_pcq_chss.csv"
 zcat Pre_Study.csv.gz | \
   eval "sed $(grep S mitreids.csv | sed 's/\r$//' | sed -e 's@^\(.*\),\(.*\)$@-e "s/\2/\1/"@' | tr '\n' ' ')" | \
   cut -d',' -f$(zcat Pre_Study.csv.gz | head -n1 | tr ',' '\n' | grep -ivnE '(record_id|redcap_event_name)' | cut -d':' -f1 | tr '\n' ',' | sed -e 's/,$//') | \
-  sed -e 's/, ,/,,/g' -e 's/, ,/,,/g' -e 's/\([0-9]\) /\1T/g' -e 's/ID/participant_id/' -e 's/timestamp/completed_ts/g' | \
-  gzip > $FILENAME.gz
+  sed -e 's/\r$//' -e 's/, ,/,,/g' -e 's/, ,/,,/g' -e 's/\[[^,]*\]//' -e 's/\([0-9]\) /\1T/g' | \
+  gawk -f rename_fields_baseline2_raw.awk > $FILENAME
 
 # Sort & upload
-cat <(zcat $FILENAME.gz | head -n1) <(zcat $FILENAME.gz | tail -n +2 | sort) | \
-  gzip | \
+cat <(cat $FILENAME | head -n1) <(cat $FILENAME | tail -n +2 | sort) | \
+  gzip -9 | \
   aws s3 cp - s3://${TARGET_BUCKET}/surveys/raw/baseline/$FILENAME.gz
 
 
@@ -1098,16 +1127,45 @@ cat <(zcat $FILENAME.gz | head -n1) <(zcat $FILENAME.gz | tail -n +2 | sort) | \
 aws s3 cp s3://${PROCESSED_BUCKET}/id-mapping/mitreids.csv .
 aws s3 cp s3://${RAW_BUCKET}/ground_truth/post-study/Post_Study.csv.gz .
 
-FILENAME="rand_swls_pss_mpfi_waaq_uwes_pcq_chss.csv"
+cat > rename_fields_post_raw.awk <<EOF
+BEGIN {
+    FS=",";
+    OFS=",";
+    FPAT="([^,]*)|(\"[^\"]+\")";
+}
+NR == 1 {
+    \$1   = "participant_id";
+    \$2   = "start_ts";
+    \$3   = "rand_completed_ts";
+    \$40  = "rand_complete";
+    \$41  = "swls_completed_ts";
+    \$47  = "swls_complete";
+    \$48  = "pss_completed_ts";
+    \$59  = "pss_complete";
+    \$60  = "waaq_completed_ts";
+    \$68  = "waaq_complete";
+    \$69  = "mpfi_completed_ts";
+    \$94  = "mpfi_complete";
+    \$95  = "uwes_completed_ts";
+    \$105 = "uwes_complete";
+    \$106 = "pcq_completed_ts";
+    \$119 = "pcq_complete";
+    \$120 = "chss_completed_ts";
+    \$137 = "chss_complete";
+}
+{ print }
+EOF
+
+FILENAME="rand_swls_pss_waaq_mpfi_uwes_pcq_chss.csv"
 zcat Post_Study.csv.gz | \
   eval "sed $(grep S mitreids.csv | sed 's/\r$//' | sed -e 's@^\(.*\),\(.*\)$@-e "s/\2/\1/"@' | tr '\n' ' ')" | \
-  cut -d',' -f$(zcat Post_Study.csv.gz | head -n1 | tr ',' '\n' | grep -ivnE '(feedback|record_id)' | cut -d':' -f1 | tr '\n' ',' | sed -e 's/,$//') | \
-  sed -e 's/, ,/,,/g' -e 's/, ,/,,/g' -e 's/\[.*\]//' -e 's/ /T/g' -e 's/ID/participant_id/' -e 's/poststudy_survey_timestamp_post/start_ts/' -e 's/timestamp/completed_ts/g' | \
-  gzip > $FILENAME.gz
+  cut -d',' -f$(zcat Post_Study.csv.gz | head -n1 | tr ',' '\n' | grep -ivnE '(feedback|record_id|poststudy_survey_complete_post)' | cut -d':' -f1 | tr '\n' ',' | sed -e 's/,$//') | \
+  sed -e 's/\r$//' -e 's/, ,/,,/g' -e 's/, ,/,,/g' -e 's/\[.*\]//' -e 's/ /T/g' | \
+  gawk -f rename_fields_post_raw.awk > $FILENAME
 
 # Sort & upload
-cat <(zcat $FILENAME.gz | head -n1) <(zcat $FILENAME.gz | tail -n +2 | sort) | \
-  gzip | \
+cat <(cat $FILENAME | head -n1) <(cat $FILENAME | tail -n +2 | sort) | \
+  gzip -9 | \
   aws s3 cp - s3://${TARGET_BUCKET}/surveys/raw/post-study/$FILENAME.gz
 
 
@@ -1630,12 +1688,83 @@ cat <(zcat rand_swls_pss_mpfi_waaq_uwes_pcq_chss.csv.gz | head -n1) <(zcat rand_
 aws s3 cp s3://${PROCESSED_BUCKET}/ground_truth/post-study/Post_Study.csv.gz .
 aws s3 cp s3://${PROCESSED_BUCKET}/id-mapping/mitreids.csv .
 
+cat > reorder_and_rename_fields_post.awk <<EOF
+BEGIN {
+    FS=",";
+    OFS=",";
+}
+NR == 1 {
+    \$3 = "poststudy_survey_complete";
+    \$4 = "rand_completed_ts";
+    \$5 = "swls_completed_ts";
+    \$6 = "pss_completed_ts";
+    \$7 = "waaq_completed_ts";
+    \$8 = "mpfi_completed_ts";
+    \$9 = "uwes_completed_ts";
+    \$10 = "uwes_complete_post";
+    \$11 = "pcq_completed_ts";
+    \$12 = "chss_completed_ts";
+    \$13 = "rand_PhysicalFunctioning";
+    \$14 = "rand_LimitsPhysicalHealth";
+    \$15 = "rand_LimitsEmotionalProblems";
+    \$16 = "rand_EmotionalWellbeing";
+    \$17 = "rand_SocialFunctioning";
+    \$18 = "rand_Pain";
+    \$19 = "rand_GeneralHealth";
+    \$20 = "rand_EnergyFatigue";
+    \$21 = "rand_Energy";
+    \$22 = "rand_Fatigue";
+    \$23 = "swls";
+    \$24 = "pss";
+    \$25 = "waaq";
+    \$26 = "mpfi_Flexibility";
+    \$27 = "mpfi_Flexibility_Acceptance";
+    \$28 = "mpfi_Flexibility_PresentMomentAwareness";
+    \$29 = "mpfi_Flexibility_SelfAsContext";
+    \$30 = "mpfi_Flexibility_Defusion";
+    \$31 = "mpfi_Flexibility_Values";
+    \$32 = "mpfi_Flexibility_CommittedAction";
+    \$33 = "mpfi_Inflexibility";
+    \$34 = "mpfi_Inflexibility_ExperientialAvoidance";
+    \$35 = "mpfi_Inflexibility_LackofContactWithPresentMoment";
+    \$36 = "mpfi_Inflexibility_SelfAsContent";
+    \$37 = "mpfi_Inflexibility_Fusion";
+    \$38 = "mpfi_Inflexibility_LackofContactWithValues";
+    \$39 = "mpfi_Inflexibility_Inaction";
+    \$40 = "uwes";
+    \$41 = "uwes_Vigor";
+    \$42 = "uwes_Dedication";
+    \$43 = "uwes_Absorption";
+    \$44 = "pcq";
+    \$45 = "pcq_Hope";
+    \$46 = "pcq_Efficacy";
+    \$47 = "pcq_Resilience";
+    \$48 = "pcq_Optimism";
+    \$49 = "chss";
+    \$50 = "chss_ChallengeStressors";
+    \$51 = "chss_HindranceStressors";
+
+    print
+}
+NR > 1 {
+    tmp = \$26;
+    \$26 = \$25;
+    \$25 = \$39;
+    for (i = 38; i >= 33; --i)
+        \$(i + 1) = \$(i);
+    \$33 = tmp;
+    
+    print
+}
+EOF
+
+FILENAME="rand_swls_pss_waaq_mpfi_uwes_pcq_chss.csv"
 zcat Post_Study.csv.gz | \
   cut -d, -f2- | \
   eval "sed $(grep S mitreids.csv | sed 's/\r$//' | sed -e 's@^\(.*\),\(.*\)$@-e "s/\2/\1/"@' | tr '\n' ' ')" | \
-  sed -e 's/poststudy_survey_timestamp_post/start_ts/' -e 's/timestamp/completed_ts/g' -e 's/, ,/,,/g' -e 's/, ,/,,/g' -e 's/\[.*\]//' -e 's/ /T/g' -e 's/ID/participant_id/' | \
-  gzip > rand_swls_pss_mpfi_waaq_uwes_pcq_chss.csv.gz
+  sed -e 's/\r$//' -e 's/poststudy_survey_timestamp_post/start_ts/' -e 's/timestamp/completed_ts/g' -e 's/, ,/,,/g' -e 's/, ,/,,/g' -e 's/, *$/,/' -e 's/\[.*\]//' -e 's/ /T/g' -e 's/ID/participant_id/' | \
+  awk -f reorder_and_rename_fields_post.awk > $FILENAME
 
-cat <(zcat rand_swls_pss_mpfi_waaq_uwes_pcq_chss.csv.gz | head -n1) <(zcat rand_swls_pss_mpfi_waaq_uwes_pcq_chss.csv.gz | tail -n +2 | sort) | \
-  gzip | \
-  aws s3 cp - s3://${TARGET_BUCKET}/surveys/scored/post-study/rand_swls_pss_mpfi_waaq_uwes_pcq_chss.csv.gz
+cat <(cat $FILENAME | head -n1) <(cat $FILENAME | tail -n +2 | sort) | \
+  gzip -9 | \
+  aws s3 cp - s3://${TARGET_BUCKET}/surveys/scored/post-study/$FILENAME.gz
