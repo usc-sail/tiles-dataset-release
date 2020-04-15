@@ -1538,16 +1538,92 @@ aws s3 cp s3://${PROCESSED_BUCKET}/ground_truth/pre-study/Pre_Study.csv.gz .
 aws s3 cp s3://${RAW_BUCKET}/ground_truth/pre-study/Pre_Study.csv.gz Pre_Study_raw.csv.gz
 aws s3 cp s3://${PROCESSED_BUCKET}/id-mapping/mitreids.csv .
 
+cat > reorder_and_rename_fields_baseline2.awk <<EOF
+BEGIN {
+    FS=",";
+    OFS=",";
+}
+NR == 1 {
+
+    \$3  = "rand_completed_ts";
+    \$4  = "swls_completed_ts";
+    \$5  = "pss_completed_ts";
+    \$6  = "mpfi_completed_ts";
+    \$7  = "waaq_completed_ts";
+    \$8  = "uwes_completed_ts";
+    \$9  = "pcq_completed_ts";
+    \$10 = "chss_completed_ts";
+    \$11 = "rand_PhysicalFunctioning";
+    \$12 = "rand_LimitsPhysicalHealth";
+    \$13 = "rand_LimitsEmotionalProblems";
+    \$14 = "rand_EmotionalWellbeing";
+    \$15 = "rand_SocialFunctioning";
+    \$16 = "rand_Pain";
+    \$17 = "rand_GeneralHealth";
+    \$18 = "rand_EnergyFatigue";
+    \$19 = "rand_Energy";
+    \$20 = "rand_Fatigue";
+    \$21 = "swls";
+    \$22 = "pss";
+    \$23 = "mpfi_Flexibility";
+    \$24 = "mpfi_Flexibility_Acceptance";
+    \$25 = "mpfi_Flexibility_PresentMomentAwareness";
+    \$26 = "mpfi_Flexibility_SelfAsContext";
+    \$27 = "mpfi_Flexibility_Defusion";
+    \$28 = "mpfi_Flexibility_Values";
+    \$29 = "mpfi_Flexibility_CommittedAction";
+    \$30 = "mpfi_Inflexibility";
+    \$31 = "mpfi_Inflexibility_ExperientialAvoidance";
+    \$32 = "mpfi_Inflexibility_LackofContactWithPresentMoment";
+    \$33 = "mpfi_Inflexibility_SelfAsContent";
+    \$34 = "mpfi_Inflexibility_Fusion";
+    \$35 = "mpfi_Inflexibility_LackofContactWithValues";
+    \$36 = "mpfi_Inflexibility_Inaction";
+    \$37 = "waaq";
+    \$38 = "uwes";
+    \$39 = "uwes_Vigor";
+    \$40 = "uwes_Dedication";
+    \$41 = "uwes_Absorption";
+    \$42 = "pcq";
+    \$43 = "pcq_Hope";
+    \$44 = "pcq_Efficacy";
+    \$45 = "pcq_Resilience";
+    \$46 = "pcq_Optimism";
+    \$47 = "chss_ChallengeStressors";
+    \$48 = "chss_HindranceStressors";
+
+    print
+}
+NR > 1 {
+    tmp = \$24;
+    for (i = 25; i <= 30; ++i)
+        \$(i - 1) = \$(i);
+    \$30 = tmp;
+    
+    tmp = \$42;
+    for (i = 41; i >= 38; --i)
+        \$(i + 1) = \$(i);
+    \$38 = \$48;
+    \$48 = \$43;
+    for (i = 44; i <= 47; ++i)
+        \$(i - 1) = \$(i);
+    \$47 = tmp;
+    
+    print
+}
+EOF
+
 zcat Pre_Study.csv.gz | \
   cut -d, -f 1,3- | \
   awk 'BEGIN {FS=","; OFS=","} NR==1 {$1 = "participant_id"; $2 = "start_ts"; print} NR>1 {demo_ts = "zgrep \"^" $1 ",\" Pre_Study_raw.csv.gz | cut -d, -f4"; demo_ts | getline start_ts; $1 = $2; $2 = start_ts; print}' | \
   eval "sed $(grep S mitreids.csv | sed 's/\r$//' | sed -e 's@^\(.*\),\(.*\)$@-e "s/\2/\1/"@' | tr '\n' ' ')" | \
-  sed -e 's/timestamp/completed_ts/g' -e 's/ /T/g' |
+  sed -e 's/\r$//' -e 's/timestamp/completed_ts/g' -e 's/,\[not completed\],/,,/g' -e 's/, ,/,,/g' -e 's/, ,/,,/g' -e 's/, *$/,/' -e 's/ /T/g' | \
+  awk -f reorder_and_rename_fields_baseline2.awk | \
   gzip > rand_swls_pss_mpfi_waaq_uwes_pcq_chss.csv.gz
 
 cat <(zcat rand_swls_pss_mpfi_waaq_uwes_pcq_chss.csv.gz | head -n1) <(zcat rand_swls_pss_mpfi_waaq_uwes_pcq_chss.csv.gz | tail -n +2 | sort) | \
-  gzip | \
-  aws s3 cp - s3://${TARGET_BUCKET}/surveys/scored/baseline/rand_swls_pss_mpfi_waaq_uwes_pcq_chss.csv.gz
+  gzip -9 | \
+  aws s3 cp - s3://${TARGET_BUCKET}/surveys/scored/baseline/part_two-rand_swls_pss_mpfi_waaq_uwes_pcq_chss.csv.gz
 
 ## Surveys: Scored / Post-Study
 
