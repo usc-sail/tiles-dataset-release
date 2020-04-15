@@ -1160,7 +1160,7 @@ FILENAME="rand_swls_pss_waaq_mpfi_uwes_pcq_chss.csv"
 zcat Post_Study.csv.gz | \
   eval "sed $(grep S mitreids.csv | sed 's/\r$//' | sed -e 's@^\(.*\),\(.*\)$@-e "s/\2/\1/"@' | tr '\n' ' ')" | \
   cut -d',' -f$(zcat Post_Study.csv.gz | head -n1 | tr ',' '\n' | grep -ivnE '(feedback|record_id|poststudy_survey_complete_post)' | cut -d':' -f1 | tr '\n' ',' | sed -e 's/,$//') | \
-  sed -e 's/\r$//' -e 's/, ,/,,/g' -e 's/, ,/,,/g' -e 's/\[.*\]//' -e 's/ /T/g' | \
+  sed -e 's/\r$//' -e 's/, ,/,,/g' -e 's/, ,/,,/g' -e 's/\[.*\]//' -e 's/ /T/g' -e 's/_post//g' | \
   gawk -f rename_fields_post_raw.awk > $FILENAME
 
 # Sort & upload
@@ -1694,55 +1694,55 @@ BEGIN {
     OFS=",";
 }
 NR == 1 {
-    \$3 = "poststudy_survey_complete";
-    \$4 = "rand_completed_ts";
-    \$5 = "swls_completed_ts";
-    \$6 = "pss_completed_ts";
-    \$7 = "waaq_completed_ts";
-    \$8 = "mpfi_completed_ts";
-    \$9 = "uwes_completed_ts";
-    \$10 = "uwes_complete_post";
-    \$11 = "pcq_completed_ts";
-    \$12 = "chss_completed_ts";
-    \$13 = "rand_PhysicalFunctioning";
-    \$14 = "rand_LimitsPhysicalHealth";
-    \$15 = "rand_LimitsEmotionalProblems";
-    \$16 = "rand_EmotionalWellbeing";
-    \$17 = "rand_SocialFunctioning";
-    \$18 = "rand_Pain";
-    \$19 = "rand_GeneralHealth";
-    \$20 = "rand_EnergyFatigue";
-    \$21 = "rand_Energy";
-    \$22 = "rand_Fatigue";
-    \$23 = "swls";
-    \$24 = "pss";
-    \$25 = "waaq";
-    \$26 = "mpfi_Flexibility";
-    \$27 = "mpfi_Flexibility_Acceptance";
-    \$28 = "mpfi_Flexibility_PresentMomentAwareness";
-    \$29 = "mpfi_Flexibility_SelfAsContext";
-    \$30 = "mpfi_Flexibility_Defusion";
-    \$31 = "mpfi_Flexibility_Values";
-    \$32 = "mpfi_Flexibility_CommittedAction";
-    \$33 = "mpfi_Inflexibility";
-    \$34 = "mpfi_Inflexibility_ExperientialAvoidance";
-    \$35 = "mpfi_Inflexibility_LackofContactWithPresentMoment";
-    \$36 = "mpfi_Inflexibility_SelfAsContent";
-    \$37 = "mpfi_Inflexibility_Fusion";
-    \$38 = "mpfi_Inflexibility_LackofContactWithValues";
-    \$39 = "mpfi_Inflexibility_Inaction";
-    \$40 = "uwes";
-    \$41 = "uwes_Vigor";
-    \$42 = "uwes_Dedication";
-    \$43 = "uwes_Absorption";
-    \$44 = "pcq";
-    \$45 = "pcq_Hope";
-    \$46 = "pcq_Efficacy";
-    \$47 = "pcq_Resilience";
-    \$48 = "pcq_Optimism";
-    \$49 = "chss";
-    \$50 = "chss_ChallengeStressors";
-    \$51 = "chss_HindranceStressors";
+    \$1 =  "participant_id";
+    \$2 =  "start_ts";
+    \$3 =  "rand_completed_ts";
+    \$4 =  "swls_completed_ts";
+    \$5 =  "pss_completed_ts";
+    \$6 =  "waaq_completed_ts";
+    \$7 =  "mpfi_completed_ts";
+    \$8 =  "uwes_completed_ts";
+    \$9  = "pcq_completed_ts";
+    \$10 = "chss_completed_ts";
+    \$11 = "rand_PhysicalFunctioning";
+    \$12 = "rand_LimitsPhysicalHealth";
+    \$13 = "rand_LimitsEmotionalProblems";
+    \$14 = "rand_EmotionalWellbeing";
+    \$15 = "rand_SocialFunctioning";
+    \$16 = "rand_Pain";
+    \$17 = "rand_GeneralHealth";
+    \$18 = "rand_EnergyFatigue";
+    \$19 = "rand_Energy";
+    \$20 = "rand_Fatigue";
+    \$21 = "swls";
+    \$22 = "pss";
+    \$23 = "waaq";
+    \$24 = "mpfi_Flexibility";
+    \$25 = "mpfi_Flexibility_Acceptance";
+    \$26 = "mpfi_Flexibility_PresentMomentAwareness";
+    \$27 = "mpfi_Flexibility_SelfAsContext";
+    \$28 = "mpfi_Flexibility_Defusion";
+    \$29 = "mpfi_Flexibility_Values";
+    \$30 = "mpfi_Flexibility_CommittedAction";
+    \$31 = "mpfi_Inflexibility";
+    \$32 = "mpfi_Inflexibility_ExperientialAvoidance";
+    \$33 = "mpfi_Inflexibility_LackofContactWithPresentMoment";
+    \$34 = "mpfi_Inflexibility_SelfAsContent";
+    \$35 = "mpfi_Inflexibility_Fusion";
+    \$36 = "mpfi_Inflexibility_LackofContactWithValues";
+    \$37 = "mpfi_Inflexibility_Inaction";
+    \$38 = "uwes";
+    \$39 = "uwes_Vigor";
+    \$40 = "uwes_Dedication";
+    \$41 = "uwes_Absorption";
+    \$42 = "pcq";
+    \$43 = "pcq_Hope";
+    \$44 = "pcq_Efficacy";
+    \$45 = "pcq_Resilience";
+    \$46 = "pcq_Optimism";
+    \$47 = "chss";
+    \$48 = "chss_ChallengeStressors";
+    \$49 = "chss_HindranceStressors";
 
     print
 }
@@ -1760,9 +1760,9 @@ EOF
 
 FILENAME="rand_swls_pss_waaq_mpfi_uwes_pcq_chss.csv"
 zcat Post_Study.csv.gz | \
-  cut -d, -f2- | \
+  cut -d, -f$(zcat Post_Study.csv.gz | head -n1 | tr ',' '\n' | grep -ivnE '(record_id|poststudy_survey_complete_post|utrecht_work_engagement_scale_uwes_complete_post)' | cut -d':' -f1 | tr '\n' ',' | sed -e 's/,$//') | \
   eval "sed $(grep S mitreids.csv | sed 's/\r$//' | sed -e 's@^\(.*\),\(.*\)$@-e "s/\2/\1/"@' | tr '\n' ' ')" | \
-  sed -e 's/\r$//' -e 's/poststudy_survey_timestamp_post/start_ts/' -e 's/timestamp/completed_ts/g' -e 's/, ,/,,/g' -e 's/, ,/,,/g' -e 's/, *$/,/' -e 's/\[.*\]//' -e 's/ /T/g' -e 's/ID/participant_id/' | \
+  sed -e 's/\r$//' -e 's/, ,/,,/g' -e 's/, ,/,,/g' -e 's/, *$/,/' -e 's/\[.*\]//' -e 's/ /T/g' | \
   awk -f reorder_and_rename_fields_post.awk > $FILENAME
 
 cat <(cat $FILENAME | head -n1) <(cat $FILENAME | tail -n +2 | sort) | \
