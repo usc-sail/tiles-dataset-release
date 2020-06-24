@@ -11,6 +11,25 @@ RAW_BUCKET="$1"
 PROCESSED_BUCKET="$2"
 TARGET_BUCKET="$3"
 
+#################
+##### Tools #####
+#################
+
+function csv_awk {
+    gawk -F, -v OFS=, -v FPAT="([^,]*)|(\"[^\"]+\")" "$@"
+}
+
+function csv_field_id() {
+    head -n1 "$1" | \
+        tr ',' '\n' | \
+        nl -n ln -s, -w1 | \
+        grep -E ",$2$" | \
+        cut -d, -f1
+}
+
+################
+##### Code #####
+################
 
 mkdir tmp
 cd tmp
@@ -223,6 +242,7 @@ EOF
 aws s3 sync s3://${RAW_BUCKET}/ground_truth/MGT/ . --exclude '*July*'
 aws s3 cp s3://${PROCESSED_BUCKET}/id-mapping/mitreids.csv .
 aws s3 cp s3://${TARGET_BUCKET}/metadata/participant-info/participant-info.csv.gz .
+aws s3 sync s3://${PROCESSED_BUCKET}/ground_truth/free_text_coding/ .
 
 # clean up mitre ids
 sed -i -e 's/\r//g' mitreids.csv
@@ -251,7 +271,7 @@ rm *PILOT*
 # Remove rows that don't make sense (empty participant_id)
 for f in 2018*
 do
-    gawk -F, -v OFS=, -v FPAT="([^,]*)|(\"[^\"]+\")" -i inplace 'NR <= 2 || length($6) > 0 {print}' $f
+    csv_awk -i inplace 'NR <= 2 || length($6) > 0 {print}' $f
 done
 
 
@@ -441,30 +461,60 @@ done
         if echo $f | grep -q perso
         then
             tail -n+3 $f | \
-                gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '{NF=73; print}' | \
+                csv_awk '{NF=73; print}' | \
                 sed -e 's/day,/day/' -e "s/$/$(printf ',%.0s' {1..82})/" -e "s/$/,$f/"
         elif echo $f | grep -q health
         then
             tail -n+3 $f | \
-                gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" "{\$59 = \$59\"$(printf ',%.0s' {1..14})\"; NF=98; print \$0}" | \
+                csv_awk "{\$59 = \$59\"$(printf ',%.0s' {1..14})\"; NF=98; print \$0}" | \
                 sed -e 's/day,/day/' -e "s/$/$(printf ',%.0s' {1..43})/" -e "s/$/,$f/"
         elif echo $f | grep -q job
         then
             tail -n+3 $f | \
-                gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" "{\$59 = \$59\"$(printf ',%.0s' {1..53})\"; NF=102; print \$0}" | \
+                csv_awk "{\$59 = \$59\"$(printf ',%.0s' {1..53})\"; NF=102; print \$0}" | \
                 sed -e 's/day,/day/' -e "s/$/,$f/"
         fi
     done
 ) | \
     sed -e 's/\r//g' -e 's/""//g' -e "s/$(head -n1 $(ls | head -n1) | cut -d, -f1-5)/$(head -n2 $(ls | head -n1) | cut -d, -f1-5 | tail -n1)/" | \
-    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '{tmp = $118; $118 = $119; $119 = $120; $120 = tmp; print $0}' | \
-    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" -f create_sent_timestamp.awk | \
-    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '{$1=$6; $2=$9; $6=$12; $7=$5; $5=$4; $4=$3; $3=$8; for (i=8; i<=NF-5; i++) { $i=$(i+5) }; NF-=6; print}' | \
-    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" 'NR == 1 {$1="participant_id"; $2="survey_type"; $3="sent_ts"; $4="start_ts"; $5="completed_ts"; $6="duration"; $7="has_finished"; print} NR>1 {print}' | \
-    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" 'length($1) > 0 {print} {}' | \
+    csv_awk '{tmp = $118; $118 = $119; $119 = $120; $120 = tmp; print $0}' | \
+    csv_awk -f create_sent_timestamp.awk | \
+    csv_awk '{$1=$6; $2=$9; $6=$12; $7=$5; $5=$4; $4=$3; $3=$8; for (i=8; i<=NF-5; i++) { $i=$(i+5) }; NF-=6; print}' | \
+    csv_awk 'NR == 1 {$1="participant_id"; $2="survey_type"; $3="sent_ts"; $4="start_ts"; $5="completed_ts"; $6="duration"; $7="has_finished"; print} NR>1 {print}' | \
+    csv_awk 'length($1) > 0 {print} {}' | \
     eval "sed $(grep S mitreids.csv | sed 's/\r$//' | sed -e 's@^\(.*\),\(.*\)$@-e "s/\2/\1/"@' | tr '\n' ' ')" | \
-    sed -e 's@,\([0-9]\{2\}\)/\([0-9]\{2\}\)/\([0-9]\{4\}\)@,\3-\1-\2@g' -e 's@,\([0-9]\{1\}\)/\([0-9]\{2\}\)/\([0-9]\{4\}\)@,\3-0\1-\2@g' -e 's@,\([0-9]\{2\}\)/\([0-9]\{1\}\)/\([0-9]\{4\}\)@,\3-\1-0\2@g' -e 's@,\([0-9]\{1\}\)/\([0-9]\{1\}\)/\([0-9]\{4\}\)@,\3-0\1-0\2@g' -e 's/\([0-9]\{2\}\) \([0-9]\{2\}\)/\1T\2/g' | \
-    gzip -9 > MGT.csv.gz
+    sed -e 's@,\([0-9]\{2\}\)/\([0-9]\{2\}\)/\([0-9]\{4\}\)@,\3-\1-\2@g' -e 's@,\([0-9]\{1\}\)/\([0-9]\{2\}\)/\([0-9]\{4\}\)@,\3-0\1-\2@g' -e 's@,\([0-9]\{2\}\)/\([0-9]\{1\}\)/\([0-9]\{4\}\)@,\3-\1-0\2@g' -e 's@,\([0-9]\{1\}\)/\([0-9]\{1\}\)/\([0-9]\{4\}\)@,\3-0\1-0\2@g' -e 's/\([0-9]\{2\}\) \([0-9]\{2\}\)/\1T\2/g' > MGT.csv
+
+CTX2="$(csv_field_id MGT.csv "context2_TEXT")"
+CTX3="$(csv_field_id MGT.csv "context3_TEXT")"
+CTX4="$(csv_field_id MGT.csv "context4_TEXT")"
+
+IFS='' # Keeping all spaces with "read"
+tail -n+2 mgt_context2.csv | \
+    while read -r line
+    do
+        TEXT="$(echo "$line" | csv_awk '{print $1}' | sed -e 's/"/\\"/g')"
+        CATEGORIES="$(echo "$line" | csv_awk -v OFS=';' '{print $2";"$5 , $3";"$6 , $4";"$7}' | sed -e 's/[|;]*$//')"
+        csv_awk -i inplace '$'"$CTX2"' == "'"$TEXT"'" {$'"$CTX2"' = "'"[$CATEGORIES]"'"}1' MGT.csv
+    done
+
+tail -n+2 mgt_context3.csv | \
+    while read -r line
+    do
+        TEXT="$(echo "$line" | csv_awk '{print $1}' | sed -e 's/"/\\"/g')"
+        CATEGORIES="$(echo "$line" | csv_awk -v OFS=';' '{print $2";"$5 , $3";"$6 , $4";"$7}' | sed -e 's/[|;]*$//')"
+        csv_awk -i inplace '$'"$CTX3"' == "'"$TEXT"'" {$'"$CTX3"' = "'"[$CATEGORIES]"'"}1' MGT.csv
+    done
+
+tail -n+2 mgt_context4.csv | \
+    while read -r line
+    do
+        TEXT="$(echo "$line" | csv_awk '{print $1}' | sed -e 's/"/\\"/g')"
+        CATEGORIES="$(echo "$line" | csv_awk -v OFS='|' '{print $2";"$5 , $3";"$6 , $4";"$7}' | sed -e 's/[|;]*$//')"
+        csv_awk -i inplace '$'"$CTX4"' == "'"$TEXT"'" {$'"$CTX4"' = "'"[$CATEGORIES]"'"}1' MGT.csv
+    done
+
+gzip -9 MGT.csv
 
 aws s3 cp MGT.csv.gz s3://${TARGET_BUCKET}/surveys/raw/EMAs/job_personality_health-context_stress_anxiety_pand_bfid_sleep_ex_tob_alc_work_itpd_irbd_dalal.csv.gz
 
@@ -559,17 +609,17 @@ EOF
 
 # Job
 zcat MGT.csv.gz | \
-    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" "NR > 1 {print $(zcat MGT.csv.gz | head -n1 | tr , '\n' | nl | grep -v Time | awk '{print $1}' | tr '\n' ',' | sed -e 's/,$//' -e 's/,/,$/g' -e 's/^/$/')}" | \
-    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '{if (length($13) > 0 || length($14) > 0) $14=1; else $14=""; if (length($11) > 0 || length($12) > 0) $13=1; else $13=""; if (length($9) > 0 || length($10) > 0) $12=1; else $12=""; $11=$8; $10=$2; for (i=10; i <= NF; ++i) $(i-9)=$(i); NF=NF-9; print}' | \
-    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '$1 ~ /job/ {tmp=0; for (i=2; i<=17; ++i) if (length($(i)) > 0) ++tmp; N=17; if (length($43) > 0) {++tmp; if ($43 == 1) {N=43; for (i=44; i<=69; ++i) if (length($(i)) > 0) ++tmp;}} printf("%.1f\n", tmp / N * 100)}' | \
+    csv_awk "NR > 1 {print $(zcat MGT.csv.gz | head -n1 | tr , '\n' | nl | grep -v Time | awk '{print $1}' | tr '\n' ',' | sed -e 's/,$//' -e 's/,/,$/g' -e 's/^/$/')}" | \
+    csv_awk '{if (length($13) > 0 || length($14) > 0) $14=1; else $14=""; if (length($11) > 0 || length($12) > 0) $13=1; else $13=""; if (length($9) > 0 || length($10) > 0) $12=1; else $12=""; $11=$8; $10=$2; for (i=10; i <= NF; ++i) $(i-9)=$(i); NF=NF-9; print}' | \
+    csv_awk '$1 ~ /job/ {tmp=0; for (i=2; i<=17; ++i) if (length($(i)) > 0) ++tmp; N=17; if (length($43) > 0) {++tmp; if ($43 == 1) {N=43; for (i=44; i<=69; ++i) if (length($(i)) > 0) ++tmp;}} printf("%.1f\n", tmp / N * 100)}' | \
     sort -n | \
     uniq -c
 
 # Participant Job compliance Histogram:
 zcat MGT.csv.gz | \
-    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" "NR > 1 {print $(zcat MGT.csv.gz | head -n1 | tr , '\n' | nl | grep -v Time | awk '{print $1}' | tr '\n' ',' | sed -e 's/,$//' -e 's/,/,$/g' -e 's/^/$/')}" | \
-    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '{if (length($13) > 0 || length($14) > 0) $14=1; else $14=""; if (length($11) > 0 || length($12) > 0) $13=1; else $13=""; if (length($9) > 0 || length($10) > 0) $12=1; else $12=""; $11=$8; $10=$2; for (i=10; i <= NF; ++i) $(i-8)=$(i); NF=NF-8; print}' | \
-    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '$2 ~ /job/ {tmp=0; for (i=3; i<=18; ++i) if (length($(i)) > 0) ++tmp; N=17; if (length($44) > 0) {++tmp; if ($44 != 2) {N=43; for (i=45; i<=70; ++i) if (length($(i)) > 0) ++tmp;}} print $1, tmp,  N}' | \
+    csv_awk "NR > 1 {print $(zcat MGT.csv.gz | head -n1 | tr , '\n' | nl | grep -v Time | awk '{print $1}' | tr '\n' ',' | sed -e 's/,$//' -e 's/,/,$/g' -e 's/^/$/')}" | \
+    csv_awk '{if (length($13) > 0 || length($14) > 0) $14=1; else $14=""; if (length($11) > 0 || length($12) > 0) $13=1; else $13=""; if (length($9) > 0 || length($10) > 0) $12=1; else $12=""; $11=$8; $10=$2; for (i=10; i <= NF; ++i) $(i-8)=$(i); NF=NF-8; print}' | \
+    csv_awk '$2 ~ /job/ {tmp=0; for (i=3; i<=18; ++i) if (length($(i)) > 0) ++tmp; N=17; if (length($44) > 0) {++tmp; if ($44 != 2) {N=43; for (i=45; i<=70; ++i) if (length($(i)) > 0) ++tmp;}} print $1, tmp,  N}' | \
     sort | \
     awk -v OFS="," -v FS="," 'BEGIN {prev = ""; X=0; N=0;} {if (prev != $1) { if (length(prev) > 0) {printf("%.1f\n", X / N * 100); X=0; N=0} prev=$1} X += $2; N += $3} END {printf("%.1f\n", X / N * 100)}' | \
     sort -n | uniq -c
@@ -585,17 +635,17 @@ zcat MGT.csv.gz | \
 
 # health
 zcat MGT.csv.gz | \
-    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" "NR > 1 {print $(zcat MGT.csv.gz | head -n1 | tr , '\n' | nl | grep -v Time | awk '{print $1}' | tr '\n' ',' | sed -e 's/,$//' -e 's/,/,$/g' -e 's/^/$/')}" | \
-    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '{if (length($13) > 0 || length($14) > 0) $14=1; else $14=""; if (length($11) > 0 || length($12) > 0) $13=1; else $13=""; if (length($9) > 0 || length($10) > 0) $12=1; else $12=""; $11=$8; $10=$2; for (i=10; i <= NF; ++i) $(i-9)=$(i); NF=NF-9; print}' | \
-    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '$1 ~ /health/ {tmp=0; for (i=2; i<=17; ++i) if (length($(i)) > 0) ++tmp; for (i=28; i<=42; ++i) if (length($(i)) > 0) ++tmp; N=31; if ($31 == 2) N -= 7; if ($39 == 2) N -= 3; printf("%.1f\n", tmp / N * 100)}' | \
+    csv_awk "NR > 1 {print $(zcat MGT.csv.gz | head -n1 | tr , '\n' | nl | grep -v Time | awk '{print $1}' | tr '\n' ',' | sed -e 's/,$//' -e 's/,/,$/g' -e 's/^/$/')}" | \
+    csv_awk '{if (length($13) > 0 || length($14) > 0) $14=1; else $14=""; if (length($11) > 0 || length($12) > 0) $13=1; else $13=""; if (length($9) > 0 || length($10) > 0) $12=1; else $12=""; $11=$8; $10=$2; for (i=10; i <= NF; ++i) $(i-9)=$(i); NF=NF-9; print}' | \
+    csv_awk '$1 ~ /health/ {tmp=0; for (i=2; i<=17; ++i) if (length($(i)) > 0) ++tmp; for (i=28; i<=42; ++i) if (length($(i)) > 0) ++tmp; N=31; if ($31 == 2) N -= 7; if ($39 == 2) N -= 3; printf("%.1f\n", tmp / N * 100)}' | \
     sort -n | \
     uniq -c
 
 # Participant health compliance Histogram:
 zcat MGT.csv.gz | \
-    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" "NR > 1 {print $(zcat MGT.csv.gz | head -n1 | tr , '\n' | nl | grep -v Time | awk '{print $1}' | tr '\n' ',' | sed -e 's/,$//' -e 's/,/,$/g' -e 's/^/$/')}" | \
-    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '{if (length($13) > 0 || length($14) > 0) $14=1; else $14=""; if (length($11) > 0 || length($12) > 0) $13=1; else $13=""; if (length($9) > 0 || length($10) > 0) $12=1; else $12=""; $11=$8; $10=$2; for (i=10; i <= NF; ++i) $(i-8)=$(i); NF=NF-8; print}' | \
-    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '$2 ~ /health/ {tmp=0; for (i=3; i<=18; ++i) if (length($(i)) > 0) ++tmp; for (i=29; i<=43; ++i) if (length($(i)) > 0) ++tmp; N=31; if ($32 == 2) N -= 7; if ($40 == 2) N -= 3; print $1, tmp,  N}' | \
+    csv_awk "NR > 1 {print $(zcat MGT.csv.gz | head -n1 | tr , '\n' | nl | grep -v Time | awk '{print $1}' | tr '\n' ',' | sed -e 's/,$//' -e 's/,/,$/g' -e 's/^/$/')}" | \
+    csv_awk '{if (length($13) > 0 || length($14) > 0) $14=1; else $14=""; if (length($11) > 0 || length($12) > 0) $13=1; else $13=""; if (length($9) > 0 || length($10) > 0) $12=1; else $12=""; $11=$8; $10=$2; for (i=10; i <= NF; ++i) $(i-8)=$(i); NF=NF-8; print}' | \
+    csv_awk '$2 ~ /health/ {tmp=0; for (i=3; i<=18; ++i) if (length($(i)) > 0) ++tmp; for (i=29; i<=43; ++i) if (length($(i)) > 0) ++tmp; N=31; if ($32 == 2) N -= 7; if ($40 == 2) N -= 3; print $1, tmp,  N}' | \
     sort | \
     awk -v OFS="," -v FS="," 'BEGIN {prev = ""; X=0; N=0;} {if (prev != $1) { if (length(prev) > 0) {printf("%.1f\n", X / N * 100); X=0; N=0} prev=$1} X += $2; N += $3} END {printf("%.1f\n", X / N * 100)}' | \
     sort -n | \
@@ -613,17 +663,17 @@ zcat MGT.csv.gz | \
 
 # Personality
 zcat MGT.csv.gz | \
-    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" "NR > 1 {print $(zcat MGT.csv.gz | head -n1 | tr , '\n' | nl | grep -v Time | awk '{print $1}' | tr '\n' ',' | sed -e 's/,$//' -e 's/,/,$/g' -e 's/^/$/')}" | \
-    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '{if (length($13) > 0 || length($14) > 0) $14=1; else $14=""; if (length($11) > 0 || length($12) > 0) $13=1; else $13=""; if (length($9) > 0 || length($10) > 0) $12=1; else $12=""; $11=$8; $10=$2; for (i=10; i <= NF; ++i) $(i-9)=$(i); NF=NF-9; print}' | \
-    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '$1 ~ /perso/ {tmp=0; for (i=2; i<=27; ++i) if (length($(i)) > 0) ++tmp; printf("%.1f\n", tmp / 26 * 100)}' | \
+    csv_awk "NR > 1 {print $(zcat MGT.csv.gz | head -n1 | tr , '\n' | nl | grep -v Time | awk '{print $1}' | tr '\n' ',' | sed -e 's/,$//' -e 's/,/,$/g' -e 's/^/$/')}" | \
+    csv_awk '{if (length($13) > 0 || length($14) > 0) $14=1; else $14=""; if (length($11) > 0 || length($12) > 0) $13=1; else $13=""; if (length($9) > 0 || length($10) > 0) $12=1; else $12=""; $11=$8; $10=$2; for (i=10; i <= NF; ++i) $(i-9)=$(i); NF=NF-9; print}' | \
+    csv_awk '$1 ~ /perso/ {tmp=0; for (i=2; i<=27; ++i) if (length($(i)) > 0) ++tmp; printf("%.1f\n", tmp / 26 * 100)}' | \
     sort -n | \
     uniq -c
 
 # Participant Personality compliance Histogram:
 zcat MGT.csv.gz | \
-    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" "NR > 1 {print $(zcat MGT.csv.gz | head -n1 | tr , '\n' | nl | grep -v Time | awk '{print $1}' | tr '\n' ',' | sed -e 's/,$//' -e 's/,/,$/g' -e 's/^/$/')}" | \
-    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '{if (length($13) > 0 || length($14) > 0) $14=1; else $14=""; if (length($11) > 0 || length($12) > 0) $13=1; else $13=""; if (length($9) > 0 || length($10) > 0) $12=1; else $12=""; $11=$8; $10=$2; for (i=10; i <= NF; ++i) $(i-8)=$(i); NF=NF-8; print}' | \
-    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '$2 ~ /perso/ {tmp=0; for (i=3; i<=28; ++i) if (length($(i)) > 0) ++tmp; print $1, tmp,  26}' | \
+    csv_awk "NR > 1 {print $(zcat MGT.csv.gz | head -n1 | tr , '\n' | nl | grep -v Time | awk '{print $1}' | tr '\n' ',' | sed -e 's/,$//' -e 's/,/,$/g' -e 's/^/$/')}" | \
+    csv_awk '{if (length($13) > 0 || length($14) > 0) $14=1; else $14=""; if (length($11) > 0 || length($12) > 0) $13=1; else $13=""; if (length($9) > 0 || length($10) > 0) $12=1; else $12=""; $11=$8; $10=$2; for (i=10; i <= NF; ++i) $(i-8)=$(i); NF=NF-8; print}' | \
+    csv_awk '$2 ~ /perso/ {tmp=0; for (i=3; i<=28; ++i) if (length($(i)) > 0) ++tmp; print $1, tmp,  26}' | \
     sort | \
     awk -v OFS="," -v FS="," 'BEGIN {prev = ""; X=0; N=0;} {if (prev != $1) { if (length(prev) > 0) {printf("%.1f\n", X / N * 100); X=0; N=0} prev=$1} X += $2; N += $3} END {printf("%.1f\n", X / N * 100)}' | \
     sort -n | \
@@ -643,6 +693,19 @@ zcat MGT.csv.gz | \
 
 
 aws s3 cp s3://${RAW_BUCKET}/app_surveys/app_surveys_updated.csv.gz .
+aws s3 sync s3://${PROCESSED_BUCKET}/ground_truth/free_text_coding/ .
+
+cat > add_quotes.awk <<EOF
+\$1 ~ /{}/ {
+    \$1 = "";
+}
+length(\$11) > 0 && substr(\$11, 1, 1) != "\\"" {
+  \$11 = "\""\$11"\"";
+}
+{
+    print;
+}
+EOF
 
 cat > extract_context_2.sed <<EOF
 # Getting rid of the one entry with a quote in it
@@ -669,11 +732,6 @@ EOF
 # every timestamps in PT (except ingested_ts_utc we don't need) => bottleneck
 # NOTE: assumes the local timezone is America/Los_Angeles (for the utility `date`)
 cat > fix_time.awk <<EOF
-BEGIN {
-  FS = ",";
-  OFS = ",";
-  FPAT = "([^,]*)|(\"[^\"]+\")";
-}
 NR == 1 {
     \$5  = gensub(/_utc$/, "", "g", \$5);
     \$6  = gensub(/_utc$/, "", "g", \$6);
@@ -712,11 +770,6 @@ EOF
 # Context2 is stored as an array of checked checkboxes indices, and we convert that to a csv
 # We also clean up the string of the free response text (15th context2)
 cat > split_context_2.awk <<EOF
-BEGIN {
-  FS = ",";
-  OFS = ",";
-  FPAT = "([^,]*)|(\"[^\"]+\")";
-}
 NR == 1 {
     for (i=1; i<=15; ++i)
         \$(12+1+i)="context2_"i
@@ -751,11 +804,6 @@ EOF
 
 
 cat > split_all_fields.awk <<EOF
-BEGIN {
-  FS = ",";
-  OFS = ",";
-  FPAT = "([^,]*)|(\"[^\"]+\")";
-}
 NR == 1 {
     \$13="context1";
     for (i = 3; i<=29; ++i)
@@ -794,11 +842,6 @@ EOF
 
 # Cleanup: removing unused fields
 cat > cleanup.awk <<EOF
-BEGIN {
-  FS = ",";
-  OFS = ",";
-  FPAT = "([^,]*)|(\"[^\"]+\")";
-}
 {
     \$1 = \$2;
     \$2 = \$3;
@@ -809,29 +852,25 @@ BEGIN {
     if (NF <= 11)
         NF = NF - 4;
     else 
-        NF = NF-5;
+        NF = NF - 5;
     print
 }
 EOF
 
 zcat app_surveys_updated.csv.gz | \
     grep -v -E ",2018-0(2-[0-9][0-9]|3-0[1-4])," | \
+    csv_awk -f add_quotes.awk | \
     sed -f extract_context_2.sed | \
-    gawk -f fix_time.awk | \
-    gawk -f split_context_2.awk | \
-    gawk -f split_all_fields.awk | \
-    gawk -f cleanup.awk > app_surveys_cleaned.csv
+    csv_awk -f fix_time.awk | \
+    csv_awk -f split_context_2.awk | \
+    csv_awk -f split_all_fields.awk | \
+    csv_awk -f cleanup.awk > app_surveys_cleaned.csv
 
 
 # Psychological Capital
 
 # Name the columns, and remove the unused ones
 cat > psycap.awk <<EOF
-BEGIN {
-  FS = ",";
-  OFS = ",";
-  FPAT = "([^,]*)|(\"[^\"]+\")";
-}
 NR == 1 {
     \$(7+1) = "Location";
     \$(7+2) = "Activity";
@@ -879,6 +918,7 @@ NR == 1 {
     }
     for (i = 3; i <= NF; ++i)
         \$(i-1) = \$(i);
+    \$(NF) = "";
     NF = 6+2+3+12+3+5+4;
     print
 }
@@ -886,11 +926,6 @@ EOF
 
 # Sort the rows using awk and sort, by survey send time
 cat > sort_csv_k2k1.awk <<EOF
-BEGIN {
-  FS = ",";
-  OFS = ",";
-  FPAT = "([^,]*)|(\"[^\"]+\")";
-}
 NR == 1 {
     print
 }
@@ -899,20 +934,41 @@ NR > 1 {
 }
 EOF
 
-gawk -f psycap.awk app_surveys_cleaned.csv | \
-    gawk -f sort_csv_k2k1.awk | \
-    gzip -9 > psychological_capital.csv.gz
+csv_awk -f psycap.awk app_surveys_cleaned.csv | \
+    csv_awk -f sort_csv_k2k1.awk > psychological_capital.csv
+
+LOCATION="$(csv_field_id psychological_capital.csv "Location")"
+ACTIVITY="$(csv_field_id psychological_capital.csv "Activity")"
+
+IFS='' # Keeping all spaces with "read"
+tail -n+2 psycap_location.csv | \
+    while read -r line
+    do
+        TEXT="$(echo "$line" | csv_awk '{print $1}' | sed -e 's/"/\\"/g')"
+        CATEGORIES="$(echo "$line" | csv_awk -v OFS=';' '{print $2";"$5 , $3";"$6 , $4";"$7}' | sed -e 's/[|;]*$//')"
+        csv_awk -i inplace '$'"$LOCATION"' == "'"$TEXT"'" {$'"$LOCATION"' = "['"$CATEGORIES"']"}1' psychological_capital.csv
+    done
+
+tail -n+2 psycap_activity.csv | \
+    while read -r line
+    do
+        TEXT="$(echo "$line" | csv_awk '{print $1}' | sed -e 's/"/\\"/g')"
+        CATEGORIES="$(echo "$line" | csv_awk -v OFS=';' '{print $2";"$5 , $3";"$6 , $4";"$7}' | sed -e 's/[|;]*$//')"
+        csv_awk -i inplace '$'"$ACTIVITY"' == "'"$TEXT"'" {$'"$ACTIVITY"' = "['"$CATEGORIES"']"}1' psychological_capital.csv
+    done
+
+gzip -9 psychological_capital.csv
 
 aws s3 cp psychological_capital.csv.gz s3://${TARGET_BUCKET}/surveys/raw/EMAs/psychological_capital-Psycap_Location_Activity_Engage_IS_CS_HS.csv.gz
 
 # Histogram:
 zcat psychological_capital.csv.gz | \
-    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" 'NR > 1 {tmp = 0; for (i = 7; i <= NF; ++i) if (length($(i)) > 0) tmp++; printf("%.1f\n", tmp / (NF - 7 + 1) * 100)}' | \
+    csv_awk 'NR > 1 {tmp = 0; for (i = 7; i <= NF; ++i) if (length($(i)) > 0) tmp++; printf("%.1f\n", tmp / (NF - 7 + 1) * 100)}' | \
     sort -n | uniq -c
 
 # Participant compliance Histogram:
 zcat psychological_capital.csv.gz | \
-    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" 'NR > 1 {tmp = 0; for (i = 7; i <= NF; ++i) if (length($(i)) > 0) tmp++; printf("%s,%d,%d\n", $1, tmp, NF - 7 + 1)}' | \
+    csv_awk 'NR > 1 {tmp = 0; for (i = 7; i <= NF; ++i) if (length($(i)) > 0) tmp++; printf("%s,%d,%d\n", $1, tmp, NF - 7 + 1)}' | \
     sort | \
     awk -v OFS="," -v FS="," 'BEGIN {prev = ""; X=0; N=0;} {if (prev != $1) { if (length(prev) > 0) {printf("%.1f\n", X / N * 100); X=0; N=0} prev=$1} X += $2; N += $3} END {printf("%.1f\n", X / N * 100)}' | \
     sort -n | uniq -c
@@ -928,11 +984,6 @@ zcat psychological_capital-Psycap_Location_Activity_Engage_IS_CS_HS.csv.gz | \
 
 # Name the columns, and remove the unused ones
 cat > psyflex.awk <<EOF
-BEGIN {
-  FS = ",";
-  OFS = ",";
-  FPAT = "([^,]*)|(\"[^\"]+\")";
-}
 NR == 1 {
     \$(7+1) = "Activity";
     for (i = 1; i <= 14; ++i)
@@ -956,26 +1007,39 @@ NR == 1 {
     }
     for (i = 3; i <= NF; ++i)
         \$(i-1) = \$(i);
+    \$(NF) = "";
     NF = 6+1+14+13;
     print
 }
 EOF
 
-gawk -f psyflex.awk app_surveys_cleaned.csv | \
-    gawk -f sort_csv_k2k1.awk | \
-    gzip -9 > psychological_flexibility.csv.gz
+csv_awk -f psyflex.awk app_surveys_cleaned.csv | \
+    csv_awk -f sort_csv_k2k1.awk > psychological_flexibility.csv
+
+ACTIVITY="$(csv_field_id psychological_flexibility.csv "Activity")"
+
+IFS='' # Keeping all spaces with "read"
+tail -n+2 psyflex_activity.csv | \
+    while read -r line
+    do
+        TEXT="$(echo "$line" | csv_awk '{print $1}' | sed -e 's/"/\\"/g')"
+        CATEGORIES="$(echo "$line" | csv_awk -v OFS=';' '{print $2";"$5 , $3";"$6 , $4";"$7}' | sed -e 's/[|;]*$//')"
+        csv_awk -i inplace '$'"$ACTIVITY"' == "'"$TEXT"'" {$'"$ACTIVITY"' = "['"$CATEGORIES"']"}1' psychological_flexibility.csv
+    done
+
+gzip -9 psychological_flexibility.csv
 
 aws s3 cp psychological_flexibility.csv.gz s3://${TARGET_BUCKET}/surveys/raw/EMAs/psychological_flexibility-Activity_Experience_PF.csv.gz
 
 
 # Histogram:
 zcat psychological_flexibility.csv.gz | \
-    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" 'NR > 1 {tmp = 0; for (i = 1; i <= 14; ++i) if (length($(6+1+i)) > 0) tmp = 1; if (length($(6+1)) > 0) ++tmp; for (i = 1; i <= 13; ++i) if (length($(6+1+14+i)) > 0) tmp++; printf("%.1f\n", tmp / 15 * 100)}' | \
+    csv_awk 'NR > 1 {tmp = 0; for (i = 1; i <= 14; ++i) if (length($(6+1+i)) > 0) tmp = 1; if (length($(6+1)) > 0) ++tmp; for (i = 1; i <= 13; ++i) if (length($(6+1+14+i)) > 0) tmp++; printf("%.1f\n", tmp / 15 * 100)}' | \
     sort -n | uniq -c
 
 # Participant compliance Histogram:
 zcat psychological_flexibility.csv.gz | \
-    gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" 'NR > 1 {tmp = 0; for (i = 1; i <= 14; ++i) if (length($(6+1+i)) > 0) tmp = 1; if (length($(6+1)) > 0) ++tmp; for (i = 1; i <= 13; ++i) if (length($(6+1+14+i)) > 0) tmp++; print $1, tmp, 15}' | \
+    csv_awk 'NR > 1 {tmp = 0; for (i = 1; i <= 14; ++i) if (length($(6+1+i)) > 0) tmp = 1; if (length($(6+1)) > 0) ++tmp; for (i = 1; i <= 13; ++i) if (length($(6+1+14+i)) > 0) tmp++; print $1, tmp, 15}' | \
     sort | \
     awk -v OFS="," -v FS="," 'BEGIN {prev = ""; X=0; N=0;} {if (prev != $1) { if (length(prev) > 0) {printf("%.1f\n", X / N * 100); X=0; N=0} prev=$1} X += $2; N += $3} END {printf("%.1f\n", X / N * 100)}' | \
     sort -n | uniq -c
@@ -993,29 +1057,29 @@ zcat psychological_flexibility-Activity_Experience_PF.csv.gz | \
 (
     # Job
     zcat MGT.csv.gz | \
-        gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" "NR > 1 {print $(zcat MGT.csv.gz | head -n1 | tr , '\n' | nl | grep -v Time | awk '{print $1}' | tr '\n' ',' | sed -e 's/,$//' -e 's/,/,$/g' -e 's/^/$/')}" | \
-        gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '{if (length($13) > 0 || length($14) > 0) $14=1; else $14=""; if (length($11) > 0 || length($12) > 0) $13=1; else $13=""; if (length($9) > 0 || length($10) > 0) $12=1; else $12=""; $11=$8; $10=$2; for (i=10; i <= NF; ++i) $(i-9)=$(i); NF=NF-9; print}' | \
-        gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '$1 ~ /job/ {tmp=0; for (i=2; i<=17; ++i) if (length($(i)) > 0) ++tmp; N=17; if (length($43) > 0) {++tmp; if ($43 == 1) {N=43; for (i=44; i<=69; ++i) if (length($(i)) > 0) ++tmp;}} printf("%.1f\n", tmp / N * 100)}'
+        csv_awk "NR > 1 {print $(zcat MGT.csv.gz | head -n1 | tr , '\n' | nl | grep -v Time | awk '{print $1}' | tr '\n' ',' | sed -e 's/,$//' -e 's/,/,$/g' -e 's/^/$/')}" | \
+        csv_awk '{if (length($13) > 0 || length($14) > 0) $14=1; else $14=""; if (length($11) > 0 || length($12) > 0) $13=1; else $13=""; if (length($9) > 0 || length($10) > 0) $12=1; else $12=""; $11=$8; $10=$2; for (i=10; i <= NF; ++i) $(i-9)=$(i); NF=NF-9; print}' | \
+        csv_awk '$1 ~ /job/ {tmp=0; for (i=2; i<=17; ++i) if (length($(i)) > 0) ++tmp; N=17; if (length($43) > 0) {++tmp; if ($43 == 1) {N=43; for (i=44; i<=69; ++i) if (length($(i)) > 0) ++tmp;}} printf("%.1f\n", tmp / N * 100)}'
 
     # health
     zcat MGT.csv.gz | \
-        gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" "NR > 1 {print $(zcat MGT.csv.gz | head -n1 | tr , '\n' | nl | grep -v Time | awk '{print $1}' | tr '\n' ',' | sed -e 's/,$//' -e 's/,/,$/g' -e 's/^/$/')}" | \
-        gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '{if (length($13) > 0 || length($14) > 0) $14=1; else $14=""; if (length($11) > 0 || length($12) > 0) $13=1; else $13=""; if (length($9) > 0 || length($10) > 0) $12=1; else $12=""; $11=$8; $10=$2; for (i=10; i <= NF; ++i) $(i-9)=$(i); NF=NF-9; print}' | \
-        gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '$1 ~ /health/ {tmp=0; for (i=2; i<=17; ++i) if (length($(i)) > 0) ++tmp; for (i=28; i<=42; ++i) if (length($(i)) > 0) ++tmp; N=31; if ($31 == 2) N -= 7; if ($39 == 2) N -= 3; printf("%.1f\n", tmp / N * 100)}'
+        csv_awk "NR > 1 {print $(zcat MGT.csv.gz | head -n1 | tr , '\n' | nl | grep -v Time | awk '{print $1}' | tr '\n' ',' | sed -e 's/,$//' -e 's/,/,$/g' -e 's/^/$/')}" | \
+        csv_awk '{if (length($13) > 0 || length($14) > 0) $14=1; else $14=""; if (length($11) > 0 || length($12) > 0) $13=1; else $13=""; if (length($9) > 0 || length($10) > 0) $12=1; else $12=""; $11=$8; $10=$2; for (i=10; i <= NF; ++i) $(i-9)=$(i); NF=NF-9; print}' | \
+        csv_awk '$1 ~ /health/ {tmp=0; for (i=2; i<=17; ++i) if (length($(i)) > 0) ++tmp; for (i=28; i<=42; ++i) if (length($(i)) > 0) ++tmp; N=31; if ($31 == 2) N -= 7; if ($39 == 2) N -= 3; printf("%.1f\n", tmp / N * 100)}'
 
     # Personality
     zcat MGT.csv.gz | \
-        gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" "NR > 1 {print $(zcat MGT.csv.gz | head -n1 | tr , '\n' | nl | grep -v Time | awk '{print $1}' | tr '\n' ',' | sed -e 's/,$//' -e 's/,/,$/g' -e 's/^/$/')}" | \
-        gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '{if (length($13) > 0 || length($14) > 0) $14=1; else $14=""; if (length($11) > 0 || length($12) > 0) $13=1; else $13=""; if (length($9) > 0 || length($10) > 0) $12=1; else $12=""; $11=$8; $10=$2; for (i=10; i <= NF; ++i) $(i-9)=$(i); NF=NF-9; print}' | \
-        gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" '$1 ~ /perso/ {tmp=0; for (i=2; i<=27; ++i) if (length($(i)) > 0) ++tmp; printf("%.1f\n", tmp / 26 * 100)}'
+        csv_awk "NR > 1 {print $(zcat MGT.csv.gz | head -n1 | tr , '\n' | nl | grep -v Time | awk '{print $1}' | tr '\n' ',' | sed -e 's/,$//' -e 's/,/,$/g' -e 's/^/$/')}" | \
+        csv_awk '{if (length($13) > 0 || length($14) > 0) $14=1; else $14=""; if (length($11) > 0 || length($12) > 0) $13=1; else $13=""; if (length($9) > 0 || length($10) > 0) $12=1; else $12=""; $11=$8; $10=$2; for (i=10; i <= NF; ++i) $(i-9)=$(i); NF=NF-9; print}' | \
+        csv_awk '$1 ~ /perso/ {tmp=0; for (i=2; i<=27; ++i) if (length($(i)) > 0) ++tmp; printf("%.1f\n", tmp / 26 * 100)}'
         
     # Psychological Capital
     zcat psychological_capital.csv.gz | \
-        gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" 'NR > 1 {tmp = 0; for (i = 7; i <= NF; ++i) if (length($(i)) > 0) tmp++; printf("%.1f\n", tmp / (NF - 7 + 1) * 100)}'
+        csv_awk 'NR > 1 {tmp = 0; for (i = 7; i <= NF; ++i) if (length($(i)) > 0) tmp++; printf("%.1f\n", tmp / (NF - 7 + 1) * 100)}'
 
      # Psychological Flexibility   
     zcat psychological_flexibility.csv.gz | \
-        gawk -v OFS="," -v FS="," -v FPAT="([^,]*)|(\"[^\"]+\")" 'NR > 1 {tmp = 0; for (i = 1; i <= 14; ++i) if (length($(6+1+i)) > 0) tmp = 1; if (length($(6+1)) > 0) ++tmp; for (i = 1; i <= 13; ++i) if (length($(6+1+14+i)) > 0) tmp++; printf("%.1f\n", tmp / 15 * 100)}'
+        csv_awk 'NR > 1 {tmp = 0; for (i = 1; i <= 14; ++i) if (length($(6+1+i)) > 0) tmp = 1; if (length($(6+1)) > 0) ++tmp; for (i = 1; i <= 13; ++i) if (length($(6+1+14+i)) > 0) tmp++; printf("%.1f\n", tmp / 15 * 100)}'
 ) | \
     sort -n | \
     uniq -c
@@ -1061,12 +1125,108 @@ EOF
 cat day.csv <(tail -n+3 night.csv) <(tail -n+3 pilot.csv) | \
     cut -d',' -f3,8-10,12- | \
     eval $MITREID_SED | \
-    sed -f dates_location_fields.sed > $FILENAME
+    sed -f dates_location_fields.sed > igtb_merged.csv
 
-# Sort & upload
-cat <(cat $FILENAME | head -n2) <(cat $FILENAME | tail -n+3 | sort) | \
-  gzip -9 | \
-  aws s3 cp - s3://${TARGET_BUCKET}/surveys/raw/baseline/$FILENAME.gz
+# Demographics Anonymization
+
+# Removed
+IGTB_COUNTRY="$(csv_field_id igtb_merged.csv country)"
+IGTB_JOBSTAT="$(csv_field_id igtb_merged.csv jobstat)"
+IGTB_OCCUP="$(csv_field_id igtb_merged.csv occup)"
+IGTB_OCCUP_TEXT="$(csv_field_id igtb_merged.csv occup_TEXT)"
+IGTB_SIZE="$(csv_field_id igtb_merged.csv size)"
+
+# Binned 
+IGTB_AGE="$(csv_field_id igtb_merged.csv age)"
+IGTB_ENGLYRS="$(csv_field_id igtb_merged.csv englyrs)"
+
+# Coarsened
+IGTB_EDUC="$(csv_field_id igtb_merged.csv educ)"
+IGTB_QUANTSUP="$(csv_field_id igtb_merged.csv quantsup)"
+IGTB_DURATION="$(csv_field_id igtb_merged.csv duration)"
+IGTB_INCOME="$(csv_field_id igtb_merged.csv income)"
+
+# Script
+cat > igtb_anonymization.awk <<EOF
+function rmcols(cols) {
+    out_col = 1;
+    for (i = 1; i < NF; i++) {
+        tmp = 0;
+        for (j in cols) {
+            if (i == cols[j]) {
+                tmp = 1;
+                break;
+            }
+        }
+        if (tmp)
+            continue;
+        \$(out_col) = \$(i);
+        out_col++;
+    }
+    NF = out_col - 1;
+}
+
+BEGIN {
+    split("$IGTB_COUNTRY,$IGTB_JOBSTAT,$IGTB_OCCUP,$IGTB_OCCUP_TEXT,$IGTB_SIZE", to_remove, ",");
+}
+
+NR <= 2 {
+    # Remove some fields
+    rmcols(to_remove);
+    print;
+    next;
+}
+
+# Binning
+length(\$$IGTB_AGE) > 0 && \$$IGTB_AGE >= 50 { \$$IGTB_AGE = 50; }
+length(\$$IGTB_AGE) > 0 && \$$IGTB_AGE <  30 { \$$IGTB_AGE = 0;  }
+length(\$$IGTB_AGE) > 0                      { \$$IGTB_AGE = \$$IGTB_AGE - (\$$IGTB_AGE % 5); }
+
+length(\$$IGTB_ENGLYRS) > 0 && \$$IGTB_ENGLYRS <  25                         { \$$IGTB_ENGLYRS = 0;  }
+length(\$$IGTB_ENGLYRS) > 0 && \$$IGTB_ENGLYRS >= 25 && \$$IGTB_ENGLYRS < 35 { \$$IGTB_ENGLYRS = 25; }
+length(\$$IGTB_ENGLYRS) > 0 && \$$IGTB_ENGLYRS >= 35                         { \$$IGTB_ENGLYRS = 35; }
+
+# Coarsening
+length(\$$IGTB_EDUC) > 0 && \$$IGTB_EDUC <= 3 { educ = "A"; }
+length(\$$IGTB_EDUC) > 0 && \$$IGTB_EDUC == 4 { educ = "B"; }
+length(\$$IGTB_EDUC) > 0 && \$$IGTB_EDUC >= 5 { educ = "C"; }
+length(\$$IGTB_EDUC) > 0                      { \$$IGTB_EDUC = educ; }
+
+length(\$$IGTB_QUANTSUP) > 0 {
+    if (\$$IGTB_QUANTSUP < 2) {
+        \$$IGTB_QUANTSUP = "A";
+    } else {
+        \$$IGTB_QUANTSUP = "B";
+    }
+}
+
+length(\$$IGTB_DURATION) > 0 && \$$IGTB_DURATION >= 6 && \$$IGTB_DURATION <= 9 { \$$IGTB_DURATION = "F"; }
+length(\$$IGTB_DURATION) > 0 && \$$IGTB_DURATION == 1                          { \$$IGTB_DURATION = "A"; }
+length(\$$IGTB_DURATION) > 0 && \$$IGTB_DURATION == 2                          { \$$IGTB_DURATION = "B"; }
+length(\$$IGTB_DURATION) > 0 && \$$IGTB_DURATION == 3                          { \$$IGTB_DURATION = "C"; }
+length(\$$IGTB_DURATION) > 0 && \$$IGTB_DURATION == 4                          { \$$IGTB_DURATION = "D"; }
+length(\$$IGTB_DURATION) > 0 && \$$IGTB_DURATION == 5                          { \$$IGTB_DURATION = "E"; }
+length(\$$IGTB_DURATION) > 0 && \$$IGTB_DURATION == 10                         { \$$IGTB_DURATION = "G"; }
+
+length(\$$IGTB_INCOME) > 0 && \$$IGTB_INCOME <= 2 { \$$IGTB_INCOME = "A"; }
+length(\$$IGTB_INCOME) > 0 && \$$IGTB_INCOME == 3 { \$$IGTB_INCOME = "B"; }
+length(\$$IGTB_INCOME) > 0 && \$$IGTB_INCOME == 4 { \$$IGTB_INCOME = "C"; }
+length(\$$IGTB_INCOME) > 0 && \$$IGTB_INCOME == 5 { \$$IGTB_INCOME = "D"; }
+length(\$$IGTB_INCOME) > 0 && \$$IGTB_INCOME == 6 { \$$IGTB_INCOME = "E"; }
+length(\$$IGTB_INCOME) > 0 && \$$IGTB_INCOME == 7 { \$$IGTB_INCOME = "F"; }
+
+{
+    # Remove some fields
+    rmcols(to_remove);
+    
+    # End: sort
+    print | "sort -n";
+}
+EOF
+
+csv_awk -f igtb_anonymization.awk igtb_merged.csv | \
+    gzip -9 | \
+    aws s3 cp - s3://${TARGET_BUCKET}/surveys/raw/baseline/$FILENAME.gz
 
 
 
@@ -1079,6 +1239,7 @@ cat <(cat $FILENAME | head -n2) <(cat $FILENAME | tail -n+3 | sort) | \
 
 aws s3 cp s3://${PROCESSED_BUCKET}/id-mapping/mitreids.csv .
 aws s3 cp s3://${RAW_BUCKET}/ground_truth/pre-study/Pre_Study.csv.gz .
+aws s3 cp s3://tiles-phase1-wav123-processed/ground_truth/free_text_coding/position_other_patient.csv .
 
 cat > rename_fields_baseline2_raw.awk <<EOF
 BEGIN {
@@ -1116,8 +1277,137 @@ zcat Pre_Study.csv.gz | \
   sed -e 's/\r$//' -e 's/, ,/,,/g' -e 's/, ,/,,/g' -e 's/\[[^,]*\]//' -e 's/\([0-9]\) /\1T/g' | \
   gawk -f rename_fields_baseline2_raw.awk > $FILENAME
 
+
+# Removed
+PRE_PREGNANT="$(csv_field_id "$FILENAME" pregnant)"
+PRE_HOUSEHOLD5="$(csv_field_id "$FILENAME" household___5)"
+PRE_HOUSEHOLD6="$(csv_field_id "$FILENAME" household___6)"
+PRE_POSITION_OTHER="$(csv_field_id "$FILENAME" position_other)"
+PRE_CERTIFICATIONS="$(csv_field_id "$FILENAME" certifications)"
+PRE_COMMUTE_TYPE="$(csv_field_id "$FILENAME" commute_type)"
+PRE_EXTRAHOURS="$(csv_field_id "$FILENAME" extrahours)"
+
+# Binned
+PRE_CHILDREN="$(csv_field_id "$FILENAME" children)"
+PRE_NURSEYEARS="$(csv_field_id "$FILENAME" nurseyears)"
+PRE_HOURS="$(csv_field_id "$FILENAME" hours)"
+PRE_OVERTIME="$(csv_field_id "$FILENAME" overtime)"
+
+# Coarsened
+PRE_RACE="$(csv_field_id "$FILENAME" race)"
+PRE_RELATIONSHIP="$(csv_field_id "$FILENAME" relationship)"
+PRE_HOUSING="$(csv_field_id "$FILENAME" housing)"
+PRE_CURRENTPOSITION="$(csv_field_id "$FILENAME" currentposition)"
+PRE_COMMUTE_TIME="$(csv_field_id "$FILENAME" commute_time)"
+PRE_STUDENT="$(csv_field_id "$FILENAME" student)"
+
+# Script
+cat > baseline_II_anonymization.awk <<EOF
+function rmcols(cols) {
+    out_col = 1;
+    for (i = 1; i < NF; i++) {
+        tmp = 0;
+        for (j in cols) {
+            if (i == cols[j]) {
+                tmp = 1;
+                break;
+            }
+        }
+        if (tmp)
+            continue;
+        \$(out_col) = \$(i);
+        out_col++;
+    }
+    NF = out_col - 1;
+}
+
+BEGIN {
+    split("$PRE_PREGNANT,$PRE_HOUSEHOLD5,$PRE_HOUSEHOLD6,$PRE_POSITION_OTHER,$PRE_CERTIFICATIONS,$PRE_COMMUTE_TYPE,$PRE_EXTRAHOURS", to_remove, ",");
+}
+
+NR <= 1 {
+    # Remove some fields
+    rmcols(to_remove);
+    print;
+    next;
+}
+
+# Binning
+length(\$$PRE_CHILDREN) > 0 && \$$PRE_CHILDREN >= 3 { \$$PRE_CHILDREN = "3+"; }
+
+length(\$$PRE_NURSEYEARS) > 0 {
+    if (\$$PRE_NURSEYEARS >= 15) { \$$PRE_NURSEYEARS = 15; }
+    else                         { \$$PRE_NURSEYEARS = \$$PRE_NURSEYEARS - (\$$PRE_NURSEYEARS % 5); }
+}
+
+length(\$$PRE_HOURS) > 0 {
+    if (\$$PRE_HOURS <= 37.5) { \$$PRE_HOURS = "A"; }
+    else                      { \$$PRE_HOURS = "B"; }
+}
+
+length(\$$PRE_OVERTIME) > 0 {
+    if (\$$PRE_OVERTIME == 0)      { \$$PRE_OVERTIME = "A"; }
+    else if (\$$PRE_OVERTIME < 10) { \$$PRE_OVERTIME = "B"; }
+    else if (\$$PRE_OVERTIME < 20) { \$$PRE_OVERTIME = "C"; }
+    else if (\$$PRE_OVERTIME < 40) { \$$PRE_OVERTIME = "D"; }
+    else                           { \$$PRE_OVERTIME = "E"; }
+}
+
+# Coarsening
+length(\$$PRE_RACE) > 0 {
+    if (\$$PRE_RACE == 1)      { \$$PRE_RACE = "A"; }
+    else if (\$$PRE_RACE == 3) { \$$PRE_RACE = "B"; }
+    else if (\$$PRE_RACE == 7) { \$$PRE_RACE = "D"; }
+    else                       { \$$PRE_RACE = "C"; }
+}
+
+length(\$$PRE_RELATIONSHIP) > 0 {
+    if (\$$PRE_RELATIONSHIP == 1)      { \$$PRE_RELATIONSHIP = "A"; }
+    else if (\$$PRE_RELATIONSHIP == 2) { \$$PRE_RELATIONSHIP = "B"; }
+    else                               { \$$PRE_RELATIONSHIP = "C"; }
+}
+
+length(\$$PRE_HOUSING) > 0 {
+    if (\$$PRE_HOUSING == 1)      { \$$PRE_HOUSING = "A"; }
+    else if (\$$PRE_HOUSING == 2) { \$$PRE_HOUSING = "B"; }
+    else                          { \$$PRE_HOUSING = "C"; }
+}
+
+$(tail -n+2 position_other_patient.csv | sed -e 's/^/$'"$PRE_POSITION_OTHER"' == "/' -e 's/,/" { $'"$PRE_POSITION_OTHER"' = "/' -e 's/$/"; }/')
+
+length(\$$PRE_CURRENTPOSITION) > 0 {
+    if (\$$PRE_CURRENTPOSITION == 1)         { \$$PRE_CURRENTPOSITION = "A"; }
+    else if (\$$PRE_CURRENTPOSITION == 2)    { \$$PRE_CURRENTPOSITION = "B"; }
+    else if (\$$PRE_CURRENTPOSITION <= 7)    { \$$PRE_CURRENTPOSITION = "C"; }
+    else if (\$$PRE_POSITION_OTHER == "yes") { \$$PRE_CURRENTPOSITION = "C"; }
+    else if (\$$PRE_POSITION_OTHER == "no")  { \$$PRE_CURRENTPOSITION = "D"; }
+    else                                     { \$$PRE_CURRENTPOSITION = ""; }
+}
+
+length(\$$PRE_COMMUTE_TIME) > 0 {
+    if (\$$PRE_COMMUTE_TIME <= 2)      { \$$PRE_COMMUTE_TIME = "A"; }
+    else if (\$$PRE_COMMUTE_TIME == 3) { \$$PRE_COMMUTE_TIME = "B"; }
+    else if (\$$PRE_COMMUTE_TIME == 4) { \$$PRE_COMMUTE_TIME = "C"; }
+    else                               { \$$PRE_COMMUTE_TIME = "D"; }
+}
+
+length(\$$PRE_STUDENT) > 0 {
+    if (\$$PRE_STUDENT == 9)      { \$$PRE_STUDENT = "A"; }
+    else if (\$$PRE_STUDENT == 1) { \$$PRE_STUDENT = "B"; }
+    else                          { \$$PRE_STUDENT = "C"; }
+}
+
+{
+    # Remove some fields
+    rmcols(to_remove);
+    
+    # End: sort
+    print | "sort -n";
+}
+EOF
+
 # Sort & upload
-cat <(cat $FILENAME | head -n1) <(cat $FILENAME | tail -n +2 | sort) | \
+csv_awk -f baseline_II_anonymization.awk $FILENAME | \
   gzip -9 | \
   aws s3 cp - s3://${TARGET_BUCKET}/surveys/raw/baseline/$FILENAME.gz
 
