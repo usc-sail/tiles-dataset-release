@@ -170,12 +170,17 @@ def ComputeSurveyCompliance(root_data_path, tikz_out_folder=None):
          if num_surveys > 0:
             hist_started.append(float(num_surveys_started)/num_surveys)
       
+      binned_hist_started = np.histogram(hist_started, bins=bins)[0]
+      cum_hist_started = np.cumsum(binned_hist_started)
+      cum_hist_x = [(bins[i]+bins[i+1])/2.0 for i in range(len(bins)-1)]
+      cum_hist_width = np.diff(bins)
       ax[0][i].hist(hist_valid, bins=bins)
       ax[0][i].title.set_text('MGT %s Survey Compliance Histogram Per Participant'%(survey_type))
       ax[0][i].set_xlabel('Ratio of Completed MGT Questions')
       ax[0][i].set_ylabel('Number of Participants')
-      ax2[0][i].hist(hist_started, bins=bins)
-      ax2[0][i].title.set_text('MGT %s Surveys Started Histogram Per Participant'%(survey_type))
+      #ax2[0][i].hist(cum_hist_started, bins=bins)
+      ax2[0][i].bar(x=cum_hist_x, height=cum_hist_started, width=cum_hist_width)
+      ax2[0][i].title.set_text('MGT %s Cumulative Surveys Started Histogram Per Participant'%(survey_type))
       ax2[0][i].set_xlabel('Percentage of Surveys Started')
       ax2[0][i].set_ylabel('Number of Participants')
       # if tikz_out_folder is not None:
@@ -256,12 +261,17 @@ def ComputeSurveyCompliance(root_data_path, tikz_out_folder=None):
          num_surveys = smgt_compliance[survey_type][participant_id]['num_surveys']
          hist_started.append(float(num_surveys_started)/num_surveys)
 
+      binned_hist_started = np.histogram(hist_started, bins=bins)[0]
+      cum_hist_started = np.cumsum(binned_hist_started)
+      cum_hist_x = [(bins[i]+bins[i+1])/2.0 for i in range(len(bins)-1)]
+      cum_hist_width = np.diff(bins)
       ax[1][i].hist(hist_valid, bins=bins)
       ax[1][i].title.set_text('S-MGT %s Survey Compliance Histogram Per Participant'%(survey_type))
       ax[1][i].set_xlabel('Ratio of Completed S-MGT Questions')
       ax[1][i].set_ylabel('Number of Participants')
-      ax2[1][i].hist(hist_started, bins=bins)
-      ax2[1][i].title.set_text('S-MGT %s Surveys Started Histogram Per Participant'%(survey_type))
+      #ax2[1][i].hist(hist_started, bins=bins)
+      ax2[1][i].bar(x=cum_hist_x, height=cum_hist_started, width=cum_hist_width)
+      ax2[1][i].title.set_text('S-MGT %s Cumulative Surveys Started Histogram Per Participant'%(survey_type))
       ax2[1][i].set_xlabel('Percentage of Started Surveys')
       ax2[1][i].set_ylabel('Number of Participants')
       # if tikz_out_folder is not None:
@@ -302,12 +312,17 @@ def ComputeSurveyCompliance(root_data_path, tikz_out_folder=None):
          hist_valid.append(float(num_valid_responses)/num_possible_responses)
       hist_started.append(float(num_surveys_started)/num_surveys)
 
+   binned_hist_started = np.histogram(hist_started, bins=bins)[0]
+   cum_hist_started = np.cumsum(binned_hist_started)
+   cum_hist_x = [(bins[i]+bins[i+1])/2.0 for i in range(len(bins)-1)]
+   cum_hist_width = np.diff(bins)
    ax[1][-1].hist(hist_valid, bins=bins)
    ax[1][-1].title.set_text('Combined MGT and S-MGT Survey Compliance Histogram Per Participant')
    ax[1][-1].set_xlabel('Ratio of Completed Questions')
    ax[1][-1].set_ylabel('Number of Participants')
-   ax2[1][-1].hist(hist_started, bins=bins)
-   ax2[1][-1].title.set_text('Combined MGT and S-MGT Percentage Surveys Started Histogram Per Participant')
+   #ax2[1][-1].hist(hist_started, bins=bins)
+   ax2[1][-1].bar(x=cum_hist_x, height=cum_hist_started, width=cum_hist_width)
+   ax2[1][-1].title.set_text('Combined MGT and S-MGT Cumulative Percentage Surveys Started Histogram Per Participant')
    ax2[1][-1].set_xlabel('Percentage of Surveys Started')
    ax2[1][-1].set_ylabel('Number of Participants')
 
