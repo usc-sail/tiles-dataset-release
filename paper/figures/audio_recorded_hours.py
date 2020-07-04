@@ -7,7 +7,7 @@ from tikzplotlib import save
 
 def main(args):
     args.recordings = Path(args.recordings).absolute()
-    args.participant_info = Path("~/Documents/Research/TILES/Data/tiles-phase1-opendataset/participant-info/participant-info.csv.gz").expanduser()
+    args.participant_info = Path(args.data_root_path).joinpath("metadata/participant-info/participant-info.csv.gz").absolute()
 
     recordings = pd.read_csv(str(args.recordings))
     participant_info = pd.read_csv(str(args.participant_info))
@@ -23,7 +23,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Compute audio histograms for recorded hours.')
     parser.add_argument('--recordings', type=str, required=False, default="../data/audio/count_wav123.csv", help='File in this repo containing audio details.')
-    parser.add_argument('--participant_info', type=str, required=True, help='File metadata/participant-info/participant-info.csv.gz in the dataset.')
+    parser.add_argument('--data_root_path', required=True, help='The path to the root folder in the data set (containing a surveys subfolder)')
     parser.add_argument('--output', type=str, required=False, default="audio-integrity.tex", help="Output .tex file")
 
     args = parser.parse_args()
